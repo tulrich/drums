@@ -1,0 +1,119 @@
+<DOCTYPE html>
+<html>
+  <head>
+    <script>
+
+var context = new webkitAudioContext();
+
+var sound_source = null;
+var buffer = null;
+
+var sounds = {};
+var voices = [];
+
+    
+function init() {
+  buffer = context.createBuffer(1, 10000, 44100);
+  sound_source = context.createBufferSource();
+  sound_source.buffer = buffer;
+  sound_source.connect(context.destination);
+
+  var data = buffer.getChannelData(0);
+  for (var i = 0; i < data.length; i++) {
+    data[i] = Math.sin(i / data.length * 1000);
+  }
+
+  var source2 = context.createBufferSource();
+  source2.buffer = buffer;
+  source2.connect(context.destination);
+
+  sound_source.start(0);
+  source2.start(0.20);
+
+  // Create voices.
+  for (var i = 0; i < 32; i++) {
+    var v = context.createBufferSource();
+    v.connect(context.destination);
+    voices.push(v);
+  }
+
+  var loadfn = function(buffer, url, error_info) {
+    if (buffer) {
+      sounds[url] = buffer;
+    }
+  };
+  load_sample("bender_stick.wav", loadfn);
+  load_sample("builttospill_kick.wav", loadfn);
+  load_sample("builttospill_ride.wav", loadfn);
+  load_sample("gobo_hat.wav", loadfn);
+  load_sample("gobo_hat2.wav", loadfn);
+  load_sample("gobo_snare.wav", loadfn);
+  load_sample("smokingpopes_kick.wav", loadfn);
+  load_sample("spoon_hi_tom.wav", loadfn);
+  load_sample("spoon_lo_tom.wav", loadfn);
+  load_sample("spoon_snare.wav", loadfn);
+  load_sample("stevenson_snare.wav", loadfn);
+}
+
+var kit = [
+    "bender_stick.wav",
+    "builttospill_kick.wav",
+    "smokingpopes_kick.wav",
+    "spoon_snare.wav",
+    "stevenson_snare.wav",
+    "gobo_hat.wav",
+    "gobo_hat2.wav",
+    "builttospill_ride.wav",
+    "spoon_hi_tom.wav",
+    "spoon_lo_tom.wav",
+           ];
+
+function keydown(ev) {
+  console.log(ev.keyCode);
+  if (ev.keyCode >= 48 && ev.keyCode <= 57) {  // '0' - '9'
+    play(kit[ev.keyCode - 48]);
+  }
+}
+
+function keyup(ev) {
+}
+
+function play(url) {
+  if (url in sounds) {
+    var src = context.createBufferSource();
+    src.buffer = sounds[url];
+    src.connect(context.destination);
+    src.start(0);
+  }
+}
+
+function load_sample(url, continuation) {
+  var request = new XMLHttpRequest();
+  request.open("GET", url, true);
+  request.responseType = "arraybuffer";
+  
+  request.onload = function() {
+    context.decodeAudioData(request.response, function(buffer) {
+        continuation(buffer, url, null);
+      },
+      function() {
+        console.log("error loading", url);
+      }
+      );
+  };
+  request.onerror = function() {
+    console.log("XHR loading error", url);
+    continuation(null, url, "error");
+  };
+  request.send();
+}
+
+window.onload = init;
+window.onkeydown = keydown;
+window.onkeyup = keyup;
+
+    </script>
+  </head>
+  <body>
+  </body>
+</html>

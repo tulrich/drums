@@ -1,6 +1,7 @@
-<DOCTYPE html>
+<!DOCTYPE html>
 <html>
   <head>
+    <script src="timeline.js"></script>
     <script>
 
 var context = new webkitAudioContext();
@@ -10,8 +11,23 @@ var buffer = null;
 
 var sounds = {};
 var voices = [];
+var kit = null;
 
-    
+function loadfn(buffer, url, error_info) {
+  if (buffer) {
+    sounds[url] = buffer;
+  }
+}
+
+function loadkit(urls) {
+  var kit = [];
+  for (u in urls) {
+    load_sample(urls[u], loadfn);
+    kit.push(urls[u]);
+  }
+  return kit;
+}
+
 function init() {
   buffer = context.createBuffer(1, 10000, 44100);
   sound_source = context.createBufferSource();
@@ -37,36 +53,35 @@ function init() {
     voices.push(v);
   }
 
-  var loadfn = function(buffer, url, error_info) {
-    if (buffer) {
-      sounds[url] = buffer;
-    }
-  };
-  load_sample("bender_stick.wav", loadfn);
-  load_sample("builttospill_kick.wav", loadfn);
-  load_sample("builttospill_ride.wav", loadfn);
-  load_sample("gobo_hat.wav", loadfn);
-  load_sample("gobo_hat2.wav", loadfn);
-  load_sample("gobo_snare.wav", loadfn);
-  load_sample("smokingpopes_kick.wav", loadfn);
-  load_sample("spoon_hi_tom.wav", loadfn);
-  load_sample("spoon_lo_tom.wav", loadfn);
-  load_sample("spoon_snare.wav", loadfn);
-  load_sample("stevenson_snare.wav", loadfn);
-}
+  kit1 = loadkit([
+      "bender_stick.wav",
+      "builttospill_kick.wav",
+      "builttospill_ride.wav",
+      "gobo_hat.wav",
+      "gobo_hat2.wav",
+      "gobo_snare.wav",
+      "smokingpopes_kick.wav",
+      "spoon_hi_tom.wav",
+      "spoon_lo_tom.wav",
+      "spoon_snare.wav",
+      "stevenson_snare.wav",]
+          );
 
-var kit = [
-    "bender_stick.wav",
-    "builttospill_kick.wav",
-    "smokingpopes_kick.wav",
-    "spoon_snare.wav",
-    "stevenson_snare.wav",
-    "gobo_hat.wav",
-    "gobo_hat2.wav",
-    "builttospill_ride.wav",
-    "spoon_hi_tom.wav",
-    "spoon_lo_tom.wav",
-           ];
+
+  // http://rhythminmind.net/STN/?page_id=14
+  kit = loadkit([
+      "samples/floor tom 6 - 14in pearl master custom.wav",
+      "samples/kick 6 outside - 22in pearl master custom.wav",
+      "samples/snare top 6 - 14in pearl master custom.wav",
+      "samples/snare bottom 6 - 14in pearl master custom.wav",
+      "samples/hat tight 6 - 13in zildjian remix.wav",
+      "samples/hat open 4 - 13in zildjian remix.wav",
+      "samples/ride 6 - 18in zildjian.wav",
+      "samples/small crash 6 - 16in zildjian.wav",
+      "samples/small tom 6 - 10in pearl master custom.wav",
+      "samples/med tom 6 - 12in pearl master custom.wav",
+                  ]);
+}
 
 function keydown(ev) {
   console.log(ev.keyCode);
@@ -91,7 +106,7 @@ function load_sample(url, continuation) {
   var request = new XMLHttpRequest();
   request.open("GET", url, true);
   request.responseType = "arraybuffer";
-  
+
   request.onload = function() {
     context.decodeAudioData(request.response, function(buffer) {
         continuation(buffer, url, null);

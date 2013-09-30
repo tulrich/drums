@@ -5,8 +5,45 @@ function create_song() {
     "version": 0,  // default version
     "default_tempo": 120,
     "kit": 0,
-    "section": []
+    "section": [],
+    "measure": []
   };
+}
+
+
+function create_test_song() {
+  var song = {
+    "version": 0,
+    "default_tempo": 120,
+    "kit": 0,
+    "measure": [
+      "beats": 4,
+      "dt": 0,
+      "note": [
+	{ "t":     0, "i": 2, "v": 200 },
+	{ "t":     0, "i": 0, "v": 220 },
+
+	{ "t":  2048, "i": 2, "v": 200 },
+
+	{ "t":  4096, "i": 2, "v": 200 },
+	{ "t":  4096, "i": 1, "v": 220 },
+
+	{ "t":  6144, "i": 2, "v": 200 },
+
+	{ "t":  8192, "i": 2, "v": 200 },
+	{ "t":  8192, "i": 0, "v": 220 },
+
+	{ "t": 10240, "i": 2, "v": 200 },
+
+	{ "t": 12288, "i": 2, "v": 200 },
+	{ "t": 12288, "i": 1, "v": 220 },
+
+	{ "t": 14336, "i": 2, "v": 200 },
+      ]
+    ],
+    "section": [ 0, 0, 0, 0 ]
+  };
+  returng song;
 }
 
 
@@ -26,32 +63,32 @@ function decode_song(encoded) {
     song.version = version;
   }
 
-  var data = btoa(encoded.substr(1));
-  var cursor = 0;
-
-  if (data.length > cursor) {
-    var tempo = encoded.charCodeAt(cursor++);
-    song.default_tempo = tempo;
-  }
-
-  if (data.length > cursor) {
-    var kit = encoded.charCodeAt(cursor++);
-    song.kit = kit;
-  }
-
-  if (encoded.length > cursor) {
-    var section_count = encoded.charCodeAt(cursor++);
-  }
-
   var state = {
     "error": null,
-    "cursor": cursor,
-    "data": data
+    "cursor": 0,
+    "data": btoa(encoded.substr(1))
   };
 
+  song.default_tempo = read_byte(state);
+  if (state.error) return null;
+
+  song.kit = read_byte(state);
+  if (state.error) return null;
+
+  var measure_count = read_byte(state);
+  if (state.error) return null;
+
+  for (var i = 0; i < measure_count; i++) {
+    song.measure.push(decode_measure(state, song));
+    if (state.error) return null;
+  }
+
+  var section_count = read_byte(state);
+  if (state.error) return null;
+
   for (var i = 0; i < section_count; i++) {
-    if (state.error) break;
-    decode_section(state, song);
+    song.section.push(decode_section(state, song));
+    if (state.error) return null;
   }
 
   return song;
@@ -59,14 +96,60 @@ function decode_song(encoded) {
 
 
 function decode_section(state, song) {
+  var measure_count = read_byte(state);
+  if (state.error) return;
+
+  var section = {
+    "measure": []  // these are just indices into the song.measure array
+  };
+
+  for (var i = 0; i < measure_count; i++) {
+    section.measure.push(read_byte(state));
+    if (state.error) return;
+  }
+
+  return section;
 }
 
 
-function decode_measure(state, song, section) {
+function decode_measure(state, song) {
+  var measure = {
+    "beats": 4,
+    "dt": 0,    // delta tempo
+    "note": []
+  };
+
+  // TODO beats & tempo_increment
+
+  var note_count = read_byte(state);
+  if (state.error) return measure;
+
+  for (var i = 0; i < note_count; i++) {
+    measure.note.push(decode_node(state, song));
+    if (state.error) return measure;
+  }
+
+  return measure;
 }
 
 
-function decode_note(state, song, measure) {
+function decode_note(state, song) {
+  var t = read_byte(state) + read_byte(state) * 256;
+  var note = {
+    "t": t,  // time offset, in 4.12 fixed-point beats from measure start
+    "i": read_byte(state),  // instrument
+    "v": read_byte(state)   // volume 0-255
+  };
+  return note;
+}
+
+
+function read_byte(state) {
+  if (state.cursor >= state.data.length) {
+    state.error = "read_byte: out of data, cursor = " + state.cursor;
+    return 0;
+  }
+  return state.data.charCodeAt(state.cursor++);
 }
 
 

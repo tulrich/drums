@@ -98,7 +98,7 @@ function play(url) {
     var src = context.createBufferSource();
     src.buffer = sounds[url];
     src.connect(context.destination);
-    src.start(0);
+    src.start(context.currentTime + 0.025);
   }
 }
 

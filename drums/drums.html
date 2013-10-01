@@ -1,17 +1,23 @@
 <!DOCTYPE html>
 <html>
   <head>
+    <script src="play.js"></script>
+    <script src="song.js"></script>
     <script src="timeline.js"></script>
     <script>
 
 var context = new webkitAudioContext();
+var master_verb = null;
+var master_verb_gain = null;
+var master_dry_gain = null;
+var master_comp = null;
 
 var sound_source = null;
 var buffer = null;
 
 var sounds = {};
-var voices = [];
 var kit = null;
+var song = null;
 
 function loadfn(buffer, url, error_info) {
   if (buffer) {
@@ -19,86 +25,189 @@ function loadfn(buffer, url, error_info) {
   }
 }
 
-function loadkit(urls) {
+function loadkit(instrument_list) {
   var kit = [];
-  for (u in urls) {
-    load_sample(urls[u], loadfn);
-    kit.push(urls[u]);
+  for (i in instrument_list) {
+    var info_in = instrument_list[i];
+    for (layer in info_in) {
+      for (volume in info_in[layer]) {
+	load_sample(info_in[layer][volume], loadfn);
+      }
+    }
+    kit.push(info_in);
   }
   return kit;
 }
 
 function init() {
-  buffer = context.createBuffer(1, 10000, 44100);
+  buffer = context.createBuffer(2, 10000, 44100);
+
+  // Test tone.
   sound_source = context.createBufferSource();
   sound_source.buffer = buffer;
   sound_source.connect(context.destination);
-
   var data = buffer.getChannelData(0);
   for (var i = 0; i < data.length; i++) {
     data[i] = Math.sin(i / data.length * 1000);
   }
-
-  var source2 = context.createBufferSource();
-  source2.buffer = buffer;
-  source2.connect(context.destination);
-
-  sound_source.start(0);
-  source2.start(0.20);
-
-  // Create voices.
-  for (var i = 0; i < 32; i++) {
-    var v = context.createBufferSource();
-    v.connect(context.destination);
-    voices.push(v);
+  var data = buffer.getChannelData(1);
+  for (var i = 0; i < data.length; i++) {
+    data[i] = Math.sin(i / data.length * 1000 + 0.1);
   }
+  sound_source.start(0);
+
+  // Master fx etc.
+  master_verb = context.createConvolver();
+  master_verb_gain = context.createGain();
+  master_comp = context.createDynamicsCompressor();
+  master_dry_gain = context.createGain();
+
+  master_comp.connect(context.destination);
+  master_dry_gain.connect(master_comp);
+  master_verb.connect(master_verb_gain);
+  master_verb_gain.connect(master_comp);
+
+  // http://www.openairlib.net/auralizationdb/content/stairway-university-york
+  // cc-by-sa
+//  load_sample("samples/stairwell_ortf.wav", function(buffer) {
+//    master_verb.buffer = buffer;
+//  });
+
+  // http://www.openairlib.net/auralizationdb/content/maes-howe
+  // cc-by-sa
+  load_sample("samples/mh3_000_ortf_48k.wav", function(buffer) {
+    master_verb.buffer = buffer;
+  });
+
+  // http://www.openairlib.net/auralizationdb/content/terrys-typing-room
+  // cc-by-sa
+//  load_sample("samples/terrys_typing_ortf.wav", function(buffer) {
+//    master_verb.buffer = buffer;
+//  });
+
+
+  // http://www.openairlib.net/auralizationdb/content/lady-chapel-st-albans-cathedral
+  // cc-by-sa
+  load_sample("samples/stalbans_a_binaural.wav", function(buffer) {
+    master_verb.buffer = buffer;
+  });
+
+  master_verb_gain.gain.value = 0.30;
+  master_dry_gain.gain.value = 2.0;
+
+  master_comp.attack.value = 0.003;
+  master_comp.knee.value = 30;
+  master_comp.ratio.value = 4;
+  master_comp.reduction.value = -0.000123;
+  master_comp.release.value = 0.050;
+  master_comp.threshold.value = -10;
 
   kit1 = loadkit([
-      "bender_stick.wav",
-      "builttospill_kick.wav",
-      "builttospill_ride.wav",
-      "gobo_hat.wav",
-      "gobo_hat2.wav",
-      "gobo_snare.wav",
-      "smokingpopes_kick.wav",
-      "spoon_hi_tom.wav",
-      "spoon_lo_tom.wav",
-      "spoon_snare.wav",
-      "stevenson_snare.wav",]
+      [["bender_stick.wav"]],
+      [["builttospill_kick.wav"]],
+      [["builttospill_ride.wav"]],
+      [["gobo_hat.wav"]],
+      [["gobo_hat2.wav"]],
+      [["gobo_snare.wav"]],
+      [["smokingpopes_kick.wav"]],
+      [["spoon_hi_tom.wav"]],
+      [["spoon_lo_tom.wav"]],
+      [["spoon_snare.wav"]],
+      [["stevenson_snare.wav"]],]
           );
 
 
   // http://rhythminmind.net/STN/?page_id=14
   kit = loadkit([
-      "samples/floor tom 6 - 14in pearl master custom.wav",
-      "samples/kick 6 outside - 22in pearl master custom.wav",
+    [["samples/kick 1 outside - 22in pearl master custom.wav",
+      "samples/kick 2 outside - 22in pearl master custom.wav",
+      "samples/kick 3 outside - 22in pearl master custom.wav",
+      "samples/kick 4 outside - 22in pearl master custom.wav",
+      "samples/kick 5 outside - 22in pearl master custom.wav",
+      "samples/kick 6 outside - 22in pearl master custom.wav"]],
+    [
+      ["samples/snare top 1 - 14in pearl master custom.wav",
+      "samples/snare top 2 - 14in pearl master custom.wav",
+      "samples/snare top 3 - 14in pearl master custom.wav",
+      "samples/snare top 4 - 14in pearl master custom.wav",
+      "samples/snare top 5 - 14in pearl master custom.wav",
       "samples/snare top 6 - 14in pearl master custom.wav",
-      "samples/snare bottom 6 - 14in pearl master custom.wav",
-      "samples/hat tight 6 - 13in zildjian remix.wav",
-      "samples/hat open 4 - 13in zildjian remix.wav",
-      "samples/ride 6 - 18in zildjian.wav",
-      "samples/small crash 6 - 16in zildjian.wav",
-      "samples/small tom 6 - 10in pearl master custom.wav",
-      "samples/med tom 6 - 12in pearl master custom.wav",
+//     ],
+//      [
+//      "samples/snare bottom 1 - 14in pearl master custom.wav",
+//      "samples/snare bottom 2 - 14in pearl master custom.wav",
+//      "samples/snare bottom 3 - 14in pearl master custom.wav",
+//      "samples/snare bottom 4 - 14in pearl master custom.wav",
+//      "samples/snare bottom 5 - 14in pearl master custom.wav",
+//      "samples/snare bottom 6 - 14in pearl master custom.wav",
+     ]
+    ],
+    [["samples/hat foot 3 - 13in zildjian remix.wav"]],
+    [["samples/hat tight 6 - 13in zildjian remix.wav"]],
+    [["samples/hat loose 6 - 13in zildjian remix.wav"]],
+    [["samples/hat open 4 - 13in zildjian remix.wav"]],
+    [["samples/ride 6 - 18in zildjian.wav"]],
+    //[["samples/small crash 6 - 16in zildjian.wav"]],
+    [["samples/small tom 6 - 10in pearl master custom.wav"]],
+    [["samples/med tom 6 - 12in pearl master custom.wav"]],
+    [["samples/floor tom 6 - 14in pearl master custom.wav"]],
                   ]);
+
+  song = create_test_song();//xxxx
 }
 
 function keydown(ev) {
   console.log(ev.keyCode);
   if (ev.keyCode >= 48 && ev.keyCode <= 57) {  // '0' - '9'
-    play(kit[ev.keyCode - 48]);
+    play(ev.keyCode - 48, 255.0, 0.010);
+  } else if (ev.keyCode == 32) {  // space
+    queue_song(song);
   }
+
+  // 16 == shift
+  // 17 == ctrl
+  // 18 == alt
 }
 
 function keyup(ev) {
 }
 
-function play(url) {
+var hack_layer_dt = [
+    -0.0015,
+    -0.0014,
+    -0.0013,
+    -0.0013,
+    -0.0014,
+    -0.0014,
+		      ];
+
+function play(instrument, volume, time_offset) {
+  var inst = kit[instrument];
+  for (layer in inst) {
+    var nl = inst[layer].length;
+    var index = Math.floor(volume / 256.0 * nl);
+    var url = inst[layer][index];
+    var vol1 = Math.floor((index + 1) / nl * 255.0);
+    var v = 255.0 * volume / vol1;
+    var hack_dt = hack_layer_dt[index] * layer;//xxxxxxx
+    rawplay(url, v, time_offset + hack_dt);
+  }
+}
+
+function rawplay(url, volume, time_offset) {
   if (url in sounds) {
     var src = context.createBufferSource();
     src.buffer = sounds[url];
-    src.connect(context.destination);
-    src.start(context.currentTime + 0.025);
+    var gain = context.createGain();
+    gain.gain.value = volume / 255.0;
+    gain.connect(master_dry_gain);
+    gain.connect(master_verb);
+    src.connect(gain);
+
+    if (time_offset == undefined) {
+      time_offset = 0.010;
+    }
+    src.start(context.currentTime + time_offset);
   }
 }
 

@@ -12,6 +12,7 @@ var master_verb = null;
 var master_verb_gain = null;
 var master_dry_gain = null;
 var master_comp = null;
+var fx_channel = [];
 
 var sound_source = null;
 var buffer = null;
@@ -101,6 +102,43 @@ function init() {
   master_comp.release.value = 0.050;
   master_comp.threshold.value = -10;
 
+  // fx channels
+  var flat = context.createBuffer(2, 1024, 44100);
+  flat.getChannelData(0)[0] = 0.04;
+  flat.getChannelData(1)[0] = 0.04;
+  for (var i = 0; i < 9; i++) {
+    var fx = {
+      "eqhi": context.createBiquadFilter(),
+      "eqmid": context.createBiquadFilter(),
+      "eqlo": context.createBiquadFilter(),
+      "comp": context.createDynamicsCompressor(),
+      "rev": context.createConvolver(),
+      "gain": context.createGain()
+    };
+    fx.eqhi.connect(fx.eqmid);
+    fx.eqmid.connect(fx.eqlo);
+    fx.eqlo.connect(fx.comp);
+    fx.comp.connect(fx.rev);
+    fx.rev.connect(fx.gain);
+    fx.gain.connect(master_verb);
+    fx.gain.connect(master_dry_gain);
+
+    fx.eqhi.type = "highshelf";
+    fx.eqhi.frequency.value = 12000;
+    fx.eqhi.gain.value = 0;
+    fx.eqmid.type = "peaking";
+    fx.eqmid.frequency.value = 2000;
+    fx.eqmid.Q.value = 1.0;
+    fx.eqmid.gain.value = 0;
+    fx.eqlo.type = "lowshelf";
+    fx.eqlo.frequency.value = 100;
+    fx.eqlo.gain.value = 0;
+    //fx.rev.normalize = false;
+    fx.rev.buffer = flat;
+
+    fx_channel.push(fx);
+  }
+
   kit1 = loadkit([
       [["bender_stick.wav"]],
       [["builttospill_kick.wav"]],
@@ -188,6 +226,8 @@ function init() {
                   ]);
 
   song = create_test_song();//xxxx
+
+  init_kit_fx_ui();
 }
 
 function keydown(ev) {
@@ -206,6 +246,20 @@ function keydown(ev) {
 function keyup(ev) {
 }
 
+var fx_channel_assignments = [
+  [0, 8],  // kick
+  [1, 8],  // snare
+  [2, 8],  // hat foot
+  [2, 8],  // hat tight
+  [2, 8],  // hat loose
+  [2, 8],  // hat open
+  [3, 8],  // ride
+  [4, 8],  // hitom
+  [5, 8],  // midtom
+  [6, 8],  // lotom
+  // TODO crashes etc
+];
+
 function play(instrument, volume, time_offset) {
   var inst = kit[instrument];
   for (layer in inst) {
@@ -214,18 +268,23 @@ function play(instrument, volume, time_offset) {
     var url = inst[layer][index];
     var vol1 = Math.floor((index + 1) / nl * 255.0);
     var v = 255.0 * volume / vol1;
-    rawplay(url, v, time_offset);
+    rawplay(url, v, time_offset, fx_channel_assignments[instrument]);
   }
 }
 
-function rawplay(url, volume, time_offset) {
+function rawplay(url, volume, time_offset, channels) {
   if (url in sounds) {
     var src = context.createBufferSource();
     src.buffer = sounds[url];
     var gain = context.createGain();
     gain.gain.value = volume / 255.0;
-    gain.connect(master_dry_gain);
-    gain.connect(master_verb);
+    //gain.connect(master_dry_gain);
+    //gain.connect(master_verb);
+    console.log(channels);
+    for (i in channels) {
+      gain.connect(fx_channel[channels[i]].eqhi);
+    }
+    //gain.connect(master_dry_gain);//xxx
     src.connect(gain);
 
     if (time_offset == undefined) {
@@ -256,18 +315,54 @@ function load_sample(url, continuation) {
   request.send();
 }
 
+// kit ui
+
+function init_kit_fx_ui() {
+  var channel_names = [ "kick", "snare", "hat", "ride",
+			"hitom", "midtom", "lotom",
+			"OH", "room"
+			 ];
+  for (var i in channel_names) {
+    document.getElementById("fx" + i).appendChild(make_channel_fx_ui(i, channel_names[i]));
+  }
+}
+
+function make_channel_fx_ui(i, label) {
+  var outer = document.createElement("div");
+  outer.innerHTML = label + "<br/>";
+  outer.appendChild(make_control_widget(i, 'eqhi', fx_channel[i].eqhi.gain, 0, 1, 0.5));
+  return outer;
+}
+
+function make_control_widget(i, label, variable, lo, hi, def) {
+  var d = document.createElement("div");
+  d.setAttribute("class", "control");
+  d.innerHTML = "<span><div class='gauge32' id='fx" + i + label + "' style='height: 32px;'/>" + label + "</span>";
+
+  // hookup gauge 'fx0eqhi' to the variable.value
+
+  return d;
+}
+
+
 window.onload = init;
 window.onkeydown = keydown;
 window.onkeyup = keyup;
 
     </script>
     <style type="text/css">
+      .control {
+        //margin-left: auto;
+        //margin-right: 0px;
+        //float: right;
+        position: relative;
+      }
       .gauge32 {
         position: absolute;
-        bottom: 0;
+        top: 0;
         height: 32px;
         left: 0;
-        width: 8px;
+        width: 32px;
         background-size: 8px 32px;
         background-position: bottom;
         background-image: linear-gradient(to top, blue, cyan, green, yellow, red);
@@ -279,14 +374,19 @@ window.onkeyup = keyup;
     <div id="timeline" style="height: 200px">
     </div>
 
-    <div id="kitparams" style="height: 400px">
-      <div id="i0">
-	<span id="i0eq" style="position: relative;"><div class="gauge32" style="height: 18px;"></div></span>
-	<span id="i0comp"></span>
-	<span id="i0verb"></span>
-	<span id="i0gain"></span>
-      </div>
-    </div>
-    
+    <table id="kitparams" style="height: 400px;">
+      <tr>
+        <td id="fx0">
+        </td><td id="fx1">
+        </td><td id="fx2">
+        </td><td id="fx3">
+        </td><td id="fx4">
+        </td><td id="fx5">
+        </td><td id="fx6">
+        </td><td id="fx7">
+        </td><td id="fx8">
+	</td>
+      </tr>
+    </table>
   </body>
 </html>

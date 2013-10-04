@@ -68,29 +68,27 @@ function init() {
   master_verb_gain.connect(master_comp);
 
   // http://www.openairlib.net/auralizationdb/content/stairway-university-york
-  // cc-by-sa
-//  load_sample("samples/stairwell_ortf.wav", function(buffer) {
-//    master_verb.buffer = buffer;
-//  });
-
   // http://www.openairlib.net/auralizationdb/content/maes-howe
-  // cc-by-sa
-  load_sample("samples/mh3_000_ortf_48k.wav", function(buffer) {
-    master_verb.buffer = buffer;
-  });
-
   // http://www.openairlib.net/auralizationdb/content/terrys-typing-room
-  // cc-by-sa
-//  load_sample("samples/terrys_typing_ortf.wav", function(buffer) {
-//    master_verb.buffer = buffer;
-//  });
-
-
   // http://www.openairlib.net/auralizationdb/content/lady-chapel-st-albans-cathedral
   // cc-by-sa
-  load_sample("samples/stalbans_a_binaural.wav", function(buffer) {
-    master_verb.buffer = buffer;
-  });
+//  load_sample(
+//      //"samples/stairwell_ortf.wav",   // tight
+//      //"samples/mh3_000_ortf_48k.wav",  // nice small room (vocal?)
+//      //"samples/terrys_typing_ortf.wav",  // big, slap-back
+//      "samples/lyd3_000_ortf_48k.wav",  //
+//      //"samples/stalbans_a_binaural.wav",  // boomy, but boxy
+//      function(buffer) {
+//	master_verb.buffer = buffer;
+//      });
+
+  // http://www.echochamber.ch/index.php/tipps-a-freebies/impulseresponses
+  // http://www.echochamber.ch/images/responses/quantec/quantec_1.ZIP
+  load_sample(
+      "samples/reverb/quantec_1/concert_h+a.wav",
+      function(buffer) {
+	master_verb.buffer = buffer;
+      });
 
   master_verb_gain.gain.value = 0.30;
   master_dry_gain.gain.value = 2.0;
@@ -124,33 +122,68 @@ function init() {
       "samples/kick 3 outside - 22in pearl master custom.wav",
       "samples/kick 4 outside - 22in pearl master custom.wav",
       "samples/kick 5 outside - 22in pearl master custom.wav",
-      "samples/kick 6 outside - 22in pearl master custom.wav"]],
-    [
-      ["samples/snare top 1 - 14in pearl master custom.wav",
-      "samples/snare top 2 - 14in pearl master custom.wav",
-      "samples/snare top 3 - 14in pearl master custom.wav",
-      "samples/snare top 4 - 14in pearl master custom.wav",
-      "samples/snare top 5 - 14in pearl master custom.wav",
-      "samples/snare top 6 - 14in pearl master custom.wav",
-//     ],
-//      [
-//      "samples/snare bottom 1 - 14in pearl master custom.wav",
-//      "samples/snare bottom 2 - 14in pearl master custom.wav",
-//      "samples/snare bottom 3 - 14in pearl master custom.wav",
-//      "samples/snare bottom 4 - 14in pearl master custom.wav",
-//      "samples/snare bottom 5 - 14in pearl master custom.wav",
-//      "samples/snare bottom 6 - 14in pearl master custom.wav",
+      "samples/kick 6 outside - 22in pearl master custom.wav"]
+    ],
+    [["samples/snare combined 1 - 14in pearl master custom.wav",
+      "samples/snare combined 2 - 14in pearl master custom.wav",
+      "samples/snare combined 3 - 14in pearl master custom.wav",
+      "samples/snare combined 4 - 14in pearl master custom.wav",
+      "samples/snare combined 5 - 14in pearl master custom.wav",
+      "samples/snare combined 6 - 14in pearl master custom.wav",
      ]
     ],
-    [["samples/hat foot 3 - 13in zildjian remix.wav"]],
-    [["samples/hat tight 6 - 13in zildjian remix.wav"]],
-    [["samples/hat loose 6 - 13in zildjian remix.wav"]],
-    [["samples/hat open 4 - 13in zildjian remix.wav"]],
-    [["samples/ride 6 - 18in zildjian.wav"]],
+    [["samples/hat foot 1 - 13in zildjian remix.wav"],
+     ["samples/hat foot 2 - 13in zildjian remix.wav"],
+     ["samples/hat foot 3 - 13in zildjian remix.wav"],
+    ],
+    [["samples/hat tight 1 - 13in zildjian remix.wav"],
+     ["samples/hat tight 2 - 13in zildjian remix.wav"],
+     ["samples/hat tight 3 - 13in zildjian remix.wav"],
+     ["samples/hat tight 4 - 13in zildjian remix.wav"],
+     ["samples/hat tight 5 - 13in zildjian remix.wav"],
+     ["samples/hat tight 6 - 13in zildjian remix.wav"],
+    ],
+    [["samples/hat loose 1 - 13in zildjian remix.wav"],
+     ["samples/hat loose 2 - 13in zildjian remix.wav"],
+     ["samples/hat loose 3 - 13in zildjian remix.wav"],
+     ["samples/hat loose 4 - 13in zildjian remix.wav"],
+     ["samples/hat loose 5 - 13in zildjian remix.wav"],
+     ["samples/hat loose 6 - 13in zildjian remix.wav"],
+    ],
+    [["samples/hat open 1 - 13in zildjian remix.wav"],
+     ["samples/hat open 2 - 13in zildjian remix.wav"],
+     ["samples/hat open 3 - 13in zildjian remix.wav"],
+     ["samples/hat open 4 - 13in zildjian remix.wav"],
+    ],
+    [["samples/ride 1 - 18in zildjian.wav"],
+     ["samples/ride 2 - 18in zildjian.wav"],
+     ["samples/ride 3 - 18in zildjian.wav"],
+     ["samples/ride 4 - 18in zildjian.wav"],
+     ["samples/ride 5 - 18in zildjian.wav"],
+     ["samples/ride 6 - 18in zildjian.wav"],
+    ],
     //[["samples/small crash 6 - 16in zildjian.wav"]],
-    [["samples/small tom 6 - 10in pearl master custom.wav"]],
-    [["samples/med tom 6 - 12in pearl master custom.wav"]],
-    [["samples/floor tom 6 - 14in pearl master custom.wav"]],
+    [["samples/small tom 1 - 10in pearl master custom.wav"],
+     ["samples/small tom 2 - 10in pearl master custom.wav"],
+     ["samples/small tom 3 - 10in pearl master custom.wav"],
+     ["samples/small tom 4 - 10in pearl master custom.wav"],
+     ["samples/small tom 5 - 10in pearl master custom.wav"],
+     ["samples/small tom 6 - 10in pearl master custom.wav"],
+    ],
+    [["samples/med tom 1 - 12in pearl master custom.wav"],
+     ["samples/med tom 2 - 12in pearl master custom.wav"],
+     ["samples/med tom 3 - 12in pearl master custom.wav"],
+     ["samples/med tom 4 - 12in pearl master custom.wav"],
+     ["samples/med tom 5 - 12in pearl master custom.wav"],
+     ["samples/med tom 6 - 12in pearl master custom.wav"],
+    ],
+    [["samples/floor tom 1 - 14in pearl master custom.wav"],
+     ["samples/floor tom 2 - 14in pearl master custom.wav"],
+     ["samples/floor tom 3 - 14in pearl master custom.wav"],
+     ["samples/floor tom 4 - 14in pearl master custom.wav"],
+     ["samples/floor tom 5 - 14in pearl master custom.wav"],
+     ["samples/floor tom 6 - 14in pearl master custom.wav"],
+    ],
                   ]);
 
   song = create_test_song();//xxxx
@@ -172,15 +205,6 @@ function keydown(ev) {
 function keyup(ev) {
 }
 
-var hack_layer_dt = [
-    -0.0015,
-    -0.0014,
-    -0.0013,
-    -0.0013,
-    -0.0014,
-    -0.0014,
-		      ];
-
 function play(instrument, volume, time_offset) {
   var inst = kit[instrument];
   for (layer in inst) {
@@ -189,8 +213,7 @@ function play(instrument, volume, time_offset) {
     var url = inst[layer][index];
     var vol1 = Math.floor((index + 1) / nl * 255.0);
     var v = 255.0 * volume / vol1;
-    var hack_dt = hack_layer_dt[index] * layer;//xxxxxxx
-    rawplay(url, v, time_offset + hack_dt);
+    rawplay(url, v, time_offset);
   }
 }
 

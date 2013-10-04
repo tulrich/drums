@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
+    <title>drums</title>
     <script src="play.js"></script>
     <script src="song.js"></script>
     <script src="timeline.js"></script>
@@ -260,7 +261,32 @@ window.onkeydown = keydown;
 window.onkeyup = keyup;
 
     </script>
+    <style type="text/css">
+      .gauge32 {
+        position: absolute;
+        bottom: 0;
+        height: 32px;
+        left: 0;
+        width: 8px;
+        background-size: 8px 32px;
+        background-position: bottom;
+        background-image: linear-gradient(to top, blue, cyan, green, yellow, red);
+      }
+    </style>
   </head>
   <body>
+
+    <div id="timeline" style="height: 200px">
+    </div>
+
+    <div id="kitparams" style="height: 400px">
+      <div id="i0">
+	<span id="i0eq" style="position: relative;"><div class="gauge32" style="height: 18px;"></div></span>
+	<span id="i0comp"></span>
+	<span id="i0verb"></span>
+	<span id="i0gain"></span>
+      </div>
+    </div>
+    
   </body>
 </html>

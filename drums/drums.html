@@ -240,7 +240,22 @@ function keydown(ev) {
     play(ev.keyCode - 48, 255.0, 0.010);
   } else if (ev.keyCode == 32) {  // space
     queue_song(song);
+  } else if (ev.keyCode == 38) {  // up
+    nav_up();
+  } else if (ev.keyCode == 40) {  // down
+    nav_down();
+  } else if (ev.keyCode == 37) {  // left
+    nav_left();
+  } else if (ev.keyCode == 39) {  // right
+    nav_right();
+  } else if (ev.keyCode == 189) {  // -
+    do_increment(-1);
+  } else if (ev.keyCode == 187) {  // +
+    do_increment(1);
   }
+
+  // 189 == '-'
+  // 187 == '=' (+)
 
   // 16 == shift
   // 17 == ctrl
@@ -248,6 +263,66 @@ function keydown(ev) {
 }
 
 function keyup(ev) {
+}
+
+function handle_unanchored() {
+  if (document.activeElement == document.body ||
+      document.activeElement.getAttribute("class") != "knob32anchor") {
+    document.getElementById("fx0eqhi").previousSibling.focus();
+    return true;
+  }
+  return false;
+}
+
+function nav_up() {
+  if (handle_unanchored()) { return; }
+  var elem = document.activeElement;
+  var prev = elem.parentNode.parentNode.previousSibling;
+  if (!prev || prev.getAttribute("class") != "control") {
+    // TODO wrap
+    return;
+  }
+  prev.firstChild.firstChild.focus();
+}
+
+function nav_down() {
+  if (handle_unanchored()) { return; }
+  var elem = document.activeElement;
+  var next = elem.parentNode.parentNode.nextSibling;
+  if (!next || next.getAttribute("class") != "control") {
+    // TODO wrap
+    return;
+  }
+  next.firstChild.firstChild.focus();
+}
+
+function nav_left() {
+  if (handle_unanchored()) { return; }
+  var elem = document.activeElement;
+  var id = elem.nextSibling.getAttribute("id");
+  var channel = Number(id.substr(2, 1)) - 1;
+  if (channel < 0) channel = 8;
+  var next_id = id.substr(0, 2) + String(channel) + id.substr(3);
+  document.getElementById(next_id).previousSibling.focus();
+}
+
+function nav_right() {
+  if (handle_unanchored()) { return; }
+  var elem = document.activeElement;
+  var id = elem.nextSibling.getAttribute("id");
+  var channel = Number(id.substr(2, 1)) + 1;
+  if (channel > 8) channel = 0;
+  var next_id = id.substr(0, 2) + String(channel) + id.substr(3);
+  document.getElementById(next_id).previousSibling.focus();
+}
+
+function do_increment(ticks) {
+  var elem = document.activeElement;
+  var id = elem.nextSibling.getAttribute("id");
+  var adjust_fn = fx_adjust_function[id];
+  if (adjust_fn) {
+    adjust_fn(ticks);
+  }
 }
 
 var fx_channel_assignments = [
@@ -361,38 +436,46 @@ function make_channel_fx_ui(i, label) {
   var outer = document.createElement("div");
   outer.style.width = "34px";
   outer.innerHTML = label + "<br/>";
-  outer.appendChild(make_control_widget(i, 'eqhi', fx_channel[i].eqhi.gain, -40, 40, 0));
-  outer.appendChild(make_control_widget(i, 'eqmd', fx_channel[i].eqmid.gain, -40, 40, 0));
-  outer.appendChild(make_control_widget(i, 'eqsw', fx_channel[i].eqmid.frequency, 200, 8000, 2000));
-  outer.appendChild(make_control_widget(i, 'eqlo', fx_channel[i].eqlo.gain, -40, 40, 0));
+  outer.appendChild(make_control_widget(i, 'eqhi', fx_channel[i].eqhi.gain, -20, 20, 0));
+  outer.appendChild(make_control_widget(i, 'eqmd', fx_channel[i].eqmid.gain, -20, 20, 0));
+  outer.appendChild(make_control_widget(i, 'eqsw', fx_channel[i].eqmid.frequency, 200, 8000, 2000, 64));
+  outer.appendChild(make_control_widget(i, 'eqlo', fx_channel[i].eqlo.gain, -20, 20, 0));
 
-  outer.appendChild(make_control_widget(i, 'c-thr', fx_channel[i].comp.threshold, -100, 0, -24));
-  outer.appendChild(make_control_widget(i, 'c-rat', fx_channel[i].comp.ratio, 1, 20, 1));
-  outer.appendChild(make_control_widget(i, 'c-atk', fx_channel[i].comp.attack, 0, 1, 0.003));
-  outer.appendChild(make_control_widget(i, 'c-rel', fx_channel[i].comp.release, 0, 1, 0.25));
+  outer.appendChild(make_control_widget(i, 'c_thr', fx_channel[i].comp.threshold, -100, 0, -24));
+  outer.appendChild(make_control_widget(i, 'c_rat', fx_channel[i].comp.ratio, 1, 20, 1));
+  outer.appendChild(make_control_widget(i, 'c_att', fx_channel[i].comp.attack, 0, 1, 0.003));
+  outer.appendChild(make_control_widget(i, 'c_rel', fx_channel[i].comp.release, 0, 1, 0.25));
 
-  //outer.appendChild(make_control_widget(i, '', fx_channel[i].rev...));//xxxx
+  //outer.appendChild(make_control_widget(i, '_8', fx_channel[i].rev...));//xxxx TODO reverb
+
   outer.appendChild(make_control_widget(i, 'gain', fx_channel[i].gain.gain, 0, 2, 1));
 
   return outer;
 }
 
-function make_control_widget(i, label, variable, lo, hi, def) {
+function make_control_widget(i, label, variable, lo, hi, def, increments) {
   var d = document.createElement("div");
   d.setAttribute("class", "control");
   var id = "fx" + i + label;
-  d.innerHTML = "<div style='height: 32px; display: table-cell; vertical-align: middle; text-align: center;'><div class='knob32' id='" + id + "' style='height: 32px;'></div><p class='knoblabel'>" + label + "</p></div>";
+  d.innerHTML = "<div style='height: 32px; display: table-cell; vertical-align: " +
+      "middle; text-align: center;'><a href='javascript:void(0);' class='knob32anchor'> </a>" +
+      "<div class='knob32' id='" + id +
+	  "' style='height: 32px;'></div><p class='knoblabel'>" + label + "</p></div>";
 
   var default_tick = Math.round((def - lo) / (hi - lo) * 16.0);
+  if (increments == undefined) {
+    increments = 32;
+  }
 
   // hookup gauge 'fx0eqhi' to the variable.value
   var adjust = function(increment) {
-    var current = Math.round((variable.value - lo) / (hi - lo) * 16.0);
-    var next_tick = Math.max(0, Math.min(current + increment, 16));
-    var next_value = (next_tick / 16.0) * (hi - lo) + lo;
+    var current = Math.round((variable.value - lo) / (hi - lo) * increments);
+    var next_tick = Math.max(0, Math.min(current + increment, increments));
+    var next_value = (next_tick / increments) * (hi - lo) + lo;
+    console.log(next_value);//xxxxxxx
     variable.value = next_value;
 
-    var rotation = "rotate(" + Math.round((next_tick - 8) * 18) + "deg)";
+    var rotation = "rotate(" + Math.round((next_tick - increments / 2) * (288.0 / increments)) + "deg)";
     var elem = document.getElementById(id);
     elem.style['-webkit-transform'] = rotation;
     elem.style['-moz-transform'] = rotation;
@@ -441,6 +524,14 @@ window.onkeyup = keyup;
         text-align: center;
         margin-left: auto;
         margin-right: auto;
+      }
+      .knob32anchor {
+	position: absolute;
+        width: 32px;
+	height: 32px;
+      }
+      .knob32anchor:focus {
+	background-color:yellow;
       }
     </style>
   </head>

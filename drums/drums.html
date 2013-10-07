@@ -13,6 +13,7 @@ var master_verb_gain = null;
 var master_dry_gain = null;
 var master_comp = null;
 var fx_channel = [];
+var fx_adjust_function = {};
 
 var sound_source = null;
 var buffer = null;
@@ -103,9 +104,9 @@ function init() {
   master_comp.threshold.value = -10;
 
   // fx channels
-  var flat = context.createBuffer(2, 1024, 44100);
-  flat.getChannelData(0)[0] = 0.04;
-  flat.getChannelData(1)[0] = 0.04;
+  var flat = context.createBuffer(2, 1, 44100);
+  flat.getChannelData(0)[0] = 1;
+  flat.getChannelData(1)[0] = 1;
   for (var i = 0; i < 9; i++) {
     var fx = {
       "eqhi": context.createBiquadFilter(),
@@ -133,7 +134,10 @@ function init() {
     fx.eqlo.type = "lowshelf";
     fx.eqlo.frequency.value = 100;
     fx.eqlo.gain.value = 0;
-    //fx.rev.normalize = false;
+    fx.comp.threshold.value = -10;
+    fx.comp.ratio.value = 1;
+    fx.comp.knee.value = 0;
+    fx.rev.normalize = false;  // The f'ing normalization formula for convolver is bugged? sigh
     fx.rev.buffer = flat;
 
     fx_channel.push(fx);
@@ -280,11 +284,9 @@ function rawplay(url, volume, time_offset, channels) {
     gain.gain.value = volume / 255.0;
     //gain.connect(master_dry_gain);
     //gain.connect(master_verb);
-    console.log(channels);
     for (i in channels) {
-      gain.connect(fx_channel[channels[i]].eqhi);
+      gain.connect(fx_channel[channels[i]].eqhi);  // xxx out
     }
-    //gain.connect(master_dry_gain);//xxx
     src.connect(gain);
 
     if (time_offset == undefined) {
@@ -317,29 +319,91 @@ function load_sample(url, continuation) {
 
 // kit ui
 
+var knob_image_url;
+
 function init_kit_fx_ui() {
+  // Make a knob.
+  var canvas = document.createElement('canvas');
+  canvas.setAttribute("width", "32");
+  canvas.setAttribute("height", "32");
+  var ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, 32, 32);
+  ctx.fillStyle = "#ddd";
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 2.0;
+  ctx.beginPath();
+  ctx.arc(16.5, 16.5, 14, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(16.5, 16.5 - 8);
+  ctx.lineTo(16.5, 2);
+  ctx.stroke();
+  knob_image_url = canvas.toDataURL();
+
+  var styles = document.getElementById("styles").sheet;
+  var rule = "position: absolute; top: 0; height: 32px; left: 0; width: 32px; background-image: url(" + knob_image_url + ");";
+  styles.addRule(".knob32", rule);
+
   var channel_names = [ "kick", "snare", "hat", "ride",
-			"hitom", "midtom", "lotom",
+			"htom", "mtom", "ltom",
 			"OH", "room"
 			 ];
   for (var i in channel_names) {
     document.getElementById("fx" + i).appendChild(make_channel_fx_ui(i, channel_names[i]));
   }
+  for (var control in fx_adjust_function) {
+    fx_adjust_function[control](0);
+  }
 }
 
 function make_channel_fx_ui(i, label) {
   var outer = document.createElement("div");
+  outer.style.width = "34px";
   outer.innerHTML = label + "<br/>";
-  outer.appendChild(make_control_widget(i, 'eqhi', fx_channel[i].eqhi.gain, 0, 1, 0.5));
+  outer.appendChild(make_control_widget(i, 'eqhi', fx_channel[i].eqhi.gain, -40, 40, 0));
+  outer.appendChild(make_control_widget(i, 'eqmd', fx_channel[i].eqmid.gain, -40, 40, 0));
+  outer.appendChild(make_control_widget(i, 'eqsw', fx_channel[i].eqmid.frequency, 200, 8000, 2000));
+  outer.appendChild(make_control_widget(i, 'eqlo', fx_channel[i].eqlo.gain, -40, 40, 0));
+
+  outer.appendChild(make_control_widget(i, 'c-thr', fx_channel[i].comp.threshold, -100, 0, -24));
+  outer.appendChild(make_control_widget(i, 'c-rat', fx_channel[i].comp.ratio, 1, 20, 1));
+  outer.appendChild(make_control_widget(i, 'c-atk', fx_channel[i].comp.attack, 0, 1, 0.003));
+  outer.appendChild(make_control_widget(i, 'c-rel', fx_channel[i].comp.release, 0, 1, 0.25));
+
+  //outer.appendChild(make_control_widget(i, '', fx_channel[i].rev...));//xxxx
+  outer.appendChild(make_control_widget(i, 'gain', fx_channel[i].gain.gain, 0, 2, 1));
+
   return outer;
 }
 
 function make_control_widget(i, label, variable, lo, hi, def) {
   var d = document.createElement("div");
   d.setAttribute("class", "control");
-  d.innerHTML = "<span><div class='gauge32' id='fx" + i + label + "' style='height: 32px;'/>" + label + "</span>";
+  var id = "fx" + i + label;
+  d.innerHTML = "<div style='height: 32px; display: table-cell; vertical-align: middle; text-align: center;'><div class='knob32' id='" + id + "' style='height: 32px;'></div><p class='knoblabel'>" + label + "</p></div>";
+
+  var default_tick = Math.round((def - lo) / (hi - lo) * 16.0);
 
   // hookup gauge 'fx0eqhi' to the variable.value
+  var adjust = function(increment) {
+    var current = Math.round((variable.value - lo) / (hi - lo) * 16.0);
+    var next_tick = Math.max(0, Math.min(current + increment, 16));
+    var next_value = (next_tick / 16.0) * (hi - lo) + lo;
+    variable.value = next_value;
+
+    var rotation = "rotate(" + Math.round((next_tick - 8) * 18) + "deg)";
+    var elem = document.getElementById(id);
+    elem.style['-webkit-transform'] = rotation;
+    elem.style['-moz-transform'] = rotation;
+    elem.style['transform'] = rotation;
+
+    // maybe adjust the color if the setting is off the default.
+
+    return next_tick;
+  }
+
+  fx_adjust_function[id] = adjust;
 
   return d;
 }
@@ -350,12 +414,14 @@ window.onkeydown = keydown;
 window.onkeyup = keyup;
 
     </script>
-    <style type="text/css">
+    <style type="text/css" id="styles">
       .control {
         //margin-left: auto;
         //margin-right: 0px;
         //float: right;
         position: relative;
+        width: 34px;
+        height: 38px;
       }
       .gauge32 {
         position: absolute;
@@ -366,6 +432,15 @@ window.onkeyup = keyup;
         background-size: 8px 32px;
         background-position: bottom;
         background-image: linear-gradient(to top, blue, cyan, green, yellow, red);
+      }
+      .knoblabel {
+        width: 32px;
+        position: relative;
+        font-size: 10px;
+        font-family: sans-serif;
+        text-align: center;
+        margin-left: auto;
+        margin-right: auto;
       }
     </style>
   </head>

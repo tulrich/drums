@@ -2,38 +2,37 @@
 
 function create_play_state(song) {
   return {
-    "t": 0,
+    "playing": true,
+    "song": song,
+    "t": 0,  // song time, in (integral) samples, 44100 samples/sec
     "tempo": song.default_tempo,
     "t0currentTime": context.currentTime + 0.100
   };
 }
 
-function queue_more(song, t0, t1, state) {
-  for (var i = 0; i < song.section.length; i++) {
-    // ...xxx
-  }
+function stop_song() {
+  if (!play_state) { return; }
+  play_state.playing = false;
 }
 
-function queue_song(song) {
+function start_song(song) {
   if (!song) { return; }
 
-  var state = create_play_state(song);
-  state.t0currentTime += 1.000;
+  play_state = create_play_state(song);
 
-  //queue_more(song, song_total_ticks(song), state);
-  queue_more(song, 8192, state);//xxxxxx
+  check_queue_more();
 }
 
-function song_total_ticks(song) {
-  var total_ticks = 0;
-  for (var i = 0; i < song.measure_reference.length; i++) {
-    var measure_id = song.measure_reference[i];
-    if (measure_id < 0 || measure_id >= song.measure.length) {
-      console.log("bad measure_id at i", measure_id, i);
-    }
-    total_ticks += song.measure[measure_id].beats * 4096;
+function check_queue_more() {
+  if (!play_state.playing) {
+    return;
   }
-  return total_ticks;
+
+  var queued_through_sec = play_state.t0currentTime + play_state.t / 44100;
+  var add_time_samples = Math.round((context.currentTime + 0.200 - queued_through_sec) * 44100);
+
+  queue_more(song, add_time_samples, play_state);
+  setTimeout(check_queue_more, 100);
 }
 
 function queue_more(song, dt, state) {
@@ -46,29 +45,30 @@ function queue_more(song, dt, state) {
       console.log("bad measure_id at i", measure_id, i);
     }
     var measure = song.measure[measure_id];
-    queue_measure(measure, measure_t, t0, t1, state);
-    measure_t += measure.beats * 4096;
+    var measure_end_t = measure_t + 44100 * 60.0 * measure.beats / state.tempo;
+    queue_measure(measure, measure_t, measure_end_t, t0, t1, state);
+    measure_t = measure_end_t;
   }
+  state.t = t1;
 }
 
-function queue_measure(measure, measure_t, t0, t1, state) {
-  var time_increment = measure.beats * 4096;
-  var t_offset = (state.t0currentTime - context.currentTime) * 4096.0;
+function queue_measure(measure, measure_t, measure_end_t, t0, t1, state) {
+  if (t1 < measure_t || t0 >= measure_end_t) {
+    return;
+  }
 
-  if (measure_t + time_increment >= t0) {
-    for (var i = 0; i < measure.note.length; i++) {
-      var n = measure.note[i];
-      var abs_note_t = measure_t + n.t;
-      if (abs_note_t >= t0 && abs_note_t < t1) {
-        // Queue it.
-        if (n.t >= time_increment) {
-          console.log("bad note time", n.t, time_increment);
-        } else {
-          var t = (abs_note_t + t_offset) / (4096 * state.tempo);
-	  console.log(n.i, n.v, n.t, measure_t, t, context.currentTime + t);//xxx
-          play(n.i, n.v, context.currentTime + t);
-        }
-      }
+  for (var i = 0; i < measure.note.length; i++) {
+    var n = measure.note[i];
+    if (n.t >= measure.beats * 4096) {
+      console.log("bad note time", n.t, measure.beats * 4096);
+      continue;
+    }
+
+    var note_t = Math.round(n.t / 4096 * 60.0 / state.tempo * 44100);
+    var abs_note_t = measure_t + note_t;
+    if (abs_note_t >= t0 && abs_note_t < t1) {
+      // Queue it.
+      play(n.i, n.v, state.t0currentTime + abs_note_t / 44100);
     }
   }
 }

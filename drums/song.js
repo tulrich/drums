@@ -95,9 +95,7 @@ function create_test_song() {
 	]
       }
     ],
-    "section": [
-      { "measure": [ 0, 1, 0, 2, 0, 1, 0, 1 ] }
-    ],
+    "measure_reference": [ 0, 1, 0, 2, 0, 1, 0, 1 ],
   };
   return song;
 }
@@ -139,12 +137,12 @@ function decode_song(encoded) {
     if (state.error) return null;
   }
 
-  var section_count = read_byte(state);
-  if (state.error) return null;
+  var measure_reference_count = read_byte(state);
+  if (state.error) return;
 
-  for (var i = 0; i < section_count; i++) {
-    song.section.push(decode_section(state, song));
-    if (state.error) return null;
+  for (var i = 0; i < measure_reference_count; i++) {
+    song.measure_reference.push(read_byte(state));
+    if (state.error) return;
   }
 
   return song;
@@ -152,18 +150,6 @@ function decode_song(encoded) {
 
 
 function decode_section(state, song) {
-  var measure_count = read_byte(state);
-  if (state.error) return;
-
-  var section = {
-    "measure": []  // these are just indices into the song.measure array
-  };
-
-  for (var i = 0; i < measure_count; i++) {
-    section.measure.push(read_byte(state));
-    if (state.error) return;
-  }
-
   return section;
 }
 

@@ -13,6 +13,7 @@ var master_verb_gain = null;
 var master_dry_gain = null;
 var master_comp = null;
 var fx_channel = [];
+var fx_time_trims = [];
 var fx_adjust_function = {};
 
 var sound_source = null;
@@ -21,6 +22,11 @@ var buffer = null;
 var sounds = {};
 var kit = null;
 var song = null;
+
+var nav_x = 0;
+var nav_y = 0;
+var MAX_NAV_X = 9;
+var MAX_NAV_Y = 10;
 
 function loadfn(buffer, url, error_info) {
   if (buffer) {
@@ -141,6 +147,8 @@ function init() {
     fx.rev.buffer = flat;
 
     fx_channel.push(fx);
+
+    fx_time_trims.push({ "value": 0 });
   }
 
   kit1 = loadkit([
@@ -274,51 +282,64 @@ function handle_unanchored() {
   return false;
 }
 
-function nav_up() {
-  if (handle_unanchored()) { return; }
-  var elem = document.activeElement;
-  var prev = elem.parentNode.parentNode.previousSibling;
-  if (!prev || prev.getAttribute("class") != "control") {
-    // TODO wrap
+var fx_ids = [
+  "dt",
+  "eqhi",
+  "eqmd",
+  "eqsw",
+  "eqlo",
+  "c_thr",
+  "c_rat",
+  "c_att",
+  "c_rel",
+  "gain",
+];
+
+function nav_to_id(x, y) {
+  if (y >= 0 && y < fx_ids.length) {
+    // fx panel
+    return id = "fx" + String(x) + fx_ids[y];
+  }
+  return '';
+}
+
+function focus_nav() {
+  if (nav_x < 0) { nav_x = MAX_NAV_X - 1; }
+  if (nav_x >= MAX_NAV_X) { nav_x = 0; }
+  if (nav_y < 0) { nav_y = MAX_NAV_Y - 1; }
+  if (nav_y >= MAX_NAV_Y) { nav_y = 0; }
+  var id = nav_to_id(nav_x, nav_y);
+  if (!id) {
+    console.log("bad nav!", nav_x, nav_y);
     return;
   }
-  prev.firstChild.firstChild.focus();
+  var elem = document.getElementById(id);
+  elem.previousSibling.focus();
+}
+
+function nav_up() {
+  nav_y--;
+  focus_nav();
 }
 
 function nav_down() {
-  if (handle_unanchored()) { return; }
-  var elem = document.activeElement;
-  var next = elem.parentNode.parentNode.nextSibling;
-  if (!next || next.getAttribute("class") != "control") {
-    // TODO wrap
-    return;
-  }
-  next.firstChild.firstChild.focus();
+  nav_y++;
+  focus_nav();
 }
 
 function nav_left() {
-  if (handle_unanchored()) { return; }
-  var elem = document.activeElement;
-  var id = elem.nextSibling.getAttribute("id");
-  var channel = Number(id.substr(2, 1)) - 1;
-  if (channel < 0) channel = 8;
-  var next_id = id.substr(0, 2) + String(channel) + id.substr(3);
-  document.getElementById(next_id).previousSibling.focus();
+  nav_x--;
+  focus_nav();
 }
 
 function nav_right() {
-  if (handle_unanchored()) { return; }
-  var elem = document.activeElement;
-  var id = elem.nextSibling.getAttribute("id");
-  var channel = Number(id.substr(2, 1)) + 1;
-  if (channel > 8) channel = 0;
-  var next_id = id.substr(0, 2) + String(channel) + id.substr(3);
-  document.getElementById(next_id).previousSibling.focus();
+  nav_x++;
+  focus_nav();
 }
 
 function do_increment(ticks) {
-  var elem = document.activeElement;
-  var id = elem.nextSibling.getAttribute("id");
+  focus_nav();
+  var id = nav_to_id(nav_x, nav_y);
   var adjust_fn = fx_adjust_function[id];
   if (adjust_fn) {
     adjust_fn(ticks);
@@ -339,7 +360,7 @@ var fx_channel_assignments = [
   // TODO crashes etc
 ];
 
-function play(instrument, volume, time_offset) {
+function play(instrument, volume, time) {
   var inst = kit[instrument];
   for (layer in inst) {
     var nl = inst[layer].length;
@@ -347,11 +368,12 @@ function play(instrument, volume, time_offset) {
     var url = inst[layer][index];
     var vol1 = Math.floor((index + 1) / nl * 255.0);
     var v = 255.0 * volume / vol1;
-    rawplay(url, v, time_offset, fx_channel_assignments[instrument]);
+    var time_trim = fx_time_trims[fx_channel_assignments[instrument][0]].value;
+    rawplay(url, v, time + time_trim, fx_channel_assignments[instrument]);
   }
 }
 
-function rawplay(url, volume, time_offset, channels) {
+function rawplay(url, volume, time, channels) {
   if (url in sounds) {
     var src = context.createBufferSource();
     src.buffer = sounds[url];
@@ -364,10 +386,11 @@ function rawplay(url, volume, time_offset, channels) {
     }
     src.connect(gain);
 
-    if (time_offset == undefined) {
-      time_offset = 0.010;
+    if (time == undefined) {
+      time = context.currentTime + 0.010;
     }
-    src.start(context.currentTime + time_offset);
+    src.start(time);
+    console.log(time, context.currentTime);//xxxxxxxxx
   }
 }
 
@@ -436,6 +459,7 @@ function make_channel_fx_ui(i, label) {
   var outer = document.createElement("div");
   outer.style.width = "34px";
   outer.innerHTML = label + "<br/>";
+  outer.appendChild(make_control_widget(i, 'dt', fx_time_trims[i], -0.050, 0.050, 0));
   outer.appendChild(make_control_widget(i, 'eqhi', fx_channel[i].eqhi.gain, -20, 20, 0));
   outer.appendChild(make_control_widget(i, 'eqmd', fx_channel[i].eqmid.gain, -20, 20, 0));
   outer.appendChild(make_control_widget(i, 'eqsw', fx_channel[i].eqmid.frequency, 200, 8000, 2000, 64));

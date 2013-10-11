@@ -463,11 +463,34 @@ function init_kit_fx_ui() {
     fx_adjust_function[control](0);
   }
 
-  // TODO set default params...
-  fx_adjust_function["fx7gain"](-100);
-  fx_adjust_function["fx7gain"](4);
-  fx_adjust_function["fx8gain"](-100);
-  fx_adjust_function["fx8gain"](4);
+  // Set default params...
+  var fx_defaults = {
+    "fx0eqmd": 9,
+    "fx0eqsw": 16,
+    "fx0eqlo": 21,
+    "fx0c_thr": 29,
+    "fx0c_rat": 15,
+    "fx0c_att": 4,
+    "fx0c_rel": 8,
+    "fx1eqmd": 12,
+    "fx1eqsw": 22,
+    "fx1eqlo": 18,
+    "fx1c_thr": 24,
+    "fx1c_rat": 11,
+    "fx1c_att": 4,
+    "fx1c_rel": 8,
+    "fx2gain": 5,
+    "fx7gain": 4,
+    "fx8gain": 4,
+  };
+  set_fx_params(fx_defaults);
+}
+
+function set_fx_params(params) {
+  for (var p in params) {
+    fx_adjust_function[p](-100);  // Set it to 0.
+    fx_adjust_function[p](params[p]);  // Set the value.
+  }
 }
 
 function make_channel_fx_ui(i, label) {
@@ -477,22 +500,22 @@ function make_channel_fx_ui(i, label) {
   outer.appendChild(make_control_widget(i, 'dt', fx_time_trims[i], -0.050, 0.050, 0));
   outer.appendChild(make_control_widget(i, 'eqhi', fx_channel[i].eqhi.gain, -20, 20, 0));
   outer.appendChild(make_control_widget(i, 'eqmd', fx_channel[i].eqmid.gain, -20, 20, 0));
-  outer.appendChild(make_control_widget(i, 'eqsw', fx_channel[i].eqmid.frequency, 200, 8000, 2000, 64));
+  outer.appendChild(make_control_widget(i, 'eqsw', fx_channel[i].eqmid.frequency, 200, 8000, 2000, 64, true));
   outer.appendChild(make_control_widget(i, 'eqlo', fx_channel[i].eqlo.gain, -20, 20, 0));
 
-  outer.appendChild(make_control_widget(i, 'c_thr', fx_channel[i].comp.threshold, -100, 0, -24));
-  outer.appendChild(make_control_widget(i, 'c_rat', fx_channel[i].comp.ratio, 1, 20, 1));
-  outer.appendChild(make_control_widget(i, 'c_att', fx_channel[i].comp.attack, 0, 1, 0.003));
-  outer.appendChild(make_control_widget(i, 'c_rel', fx_channel[i].comp.release, 0, 1, 0.25));
+  outer.appendChild(make_control_widget(i, 'c_thr', fx_channel[i].comp.threshold, -100, 0, 0));
+  outer.appendChild(make_control_widget(i, 'c_rat', fx_channel[i].comp.ratio, 1, 20, 2, undefined, true));
+  outer.appendChild(make_control_widget(i, 'c_att', fx_channel[i].comp.attack, 0, 1, 0.100));
+  outer.appendChild(make_control_widget(i, 'c_rel', fx_channel[i].comp.release, 0, 1, 0.250));
 
   //outer.appendChild(make_control_widget(i, '_8', fx_channel[i].rev...));//xxxx TODO reverb
 
-  outer.appendChild(make_control_widget(i, 'gain', fx_channel[i].gain.gain, 0, 2, 1));
+  outer.appendChild(make_control_widget(i, 'gain', fx_channel[i].gain.gain, 0, 2, 1));  // log scale?
 
   return outer;
 }
 
-function make_control_widget(i, label, variable, lo, hi, def, increments) {
+function make_control_widget(i, label, variable, lo, hi, def, opt_increments, opt_logscale) {
   var d = document.createElement("div");
   d.setAttribute("class", "control");
   var id = "fx" + i + label;
@@ -501,25 +524,37 @@ function make_control_widget(i, label, variable, lo, hi, def, increments) {
       "<div class='knob32' id='" + id +
 	  "' style='height: 32px;'></div><p class='knoblabel'>" + label + "</p></div>";
 
-  var default_tick = Math.round((def - lo) / (hi - lo) * 16.0);
-  if (increments == undefined) {
-    increments = 32;
+  var increments = opt_increments || 32;
+  var logscale = opt_logscale || false;
+  if (logscale) {
+    def = Math.log(def);
+    lo = Math.log(lo);
+    hi = Math.log(hi);
   }
+  var default_tick = Math.round((def - lo) / (hi - lo) * increments);
 
   // hookup gauge 'fx0eqhi' to the variable.value
   var adjust = function(increment) {
-    var current = Math.round((variable.value - lo) / (hi - lo) * increments);
+    var current_value = variable.value;
+    if (logscale) {
+      current_value = Math.log(current_value);
+    }
+    var current = Math.round((current_value - lo) / (hi - lo) * increments);
     var next_tick = Math.max(0, Math.min(current + increment, increments));
     var next_value = (next_tick / increments) * (hi - lo) + lo;
+    if (logscale) {
+      next_value = Math.exp(next_value);
+    }
     variable.value = next_value;
 
     var rotation = "rotate(" + Math.round((next_tick - increments / 2) * (288.0 / increments)) + "deg)";
     var elem = document.getElementById(id);
-    elem.style['-webkit-transform'] = rotation;
-    elem.style['-moz-transform'] = rotation;
-    elem.style['transform'] = rotation;
-
-    // maybe adjust the color if the setting is off the default.
+    if (elem) {
+      elem.style['-webkit-transform'] = rotation;
+      elem.style['-moz-transform'] = rotation;
+      elem.style['transform'] = rotation;
+      // maybe adjust the color if the setting is off the default.
+    }
 
     var retval = { "tick": next_tick, "value": next_value };
     console.log(retval);
@@ -527,6 +562,8 @@ function make_control_widget(i, label, variable, lo, hi, def, increments) {
   }
 
   fx_adjust_function[id] = adjust;
+  adjust(-1000);
+  adjust(default_tick);
 
   return d;
 }

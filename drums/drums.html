@@ -357,16 +357,16 @@ function do_increment(ticks) {
 }
 
 var fx_channel_assignments = [
-  [0, 8],  // kick
-  [1, 8],  // snare
-  [2, 8],  // hat foot
-  [2, 8],  // hat tight
-  [2, 8],  // hat loose
-  [2, 8],  // hat open
-  [3, 8],  // ride
-  [4, 8],  // hitom
-  [5, 8],  // midtom
-  [6, 8],  // lotom
+  [0, 7, 8],  // kick
+  [1, 7, 8],  // snare
+  [2, 7, 8],  // hat foot
+  [2, 7, 8],  // hat tight
+  [2, 7, 8],  // hat loose
+  [2, 7, 8],  // hat open
+  [3, 7, 8],  // ride
+  [4, 7, 8],  // htom
+  [5, 7, 8],  // mtom
+  [6, 7, 8],  // ltom
   // TODO crashes etc
 ];
 
@@ -400,7 +400,6 @@ function rawplay(url, volume, time, channels) {
       time = context.currentTime + 0.010;
     }
     src.start(time);
-    console.log(time, context.currentTime);//xxxxxxxxx
   }
 }
 
@@ -463,6 +462,12 @@ function init_kit_fx_ui() {
   for (var control in fx_adjust_function) {
     fx_adjust_function[control](0);
   }
+
+  // TODO set default params...
+  fx_adjust_function["fx7gain"](-100);
+  fx_adjust_function["fx7gain"](4);
+  fx_adjust_function["fx8gain"](-100);
+  fx_adjust_function["fx8gain"](4);
 }
 
 function make_channel_fx_ui(i, label) {
@@ -506,7 +511,6 @@ function make_control_widget(i, label, variable, lo, hi, def, increments) {
     var current = Math.round((variable.value - lo) / (hi - lo) * increments);
     var next_tick = Math.max(0, Math.min(current + increment, increments));
     var next_value = (next_tick / increments) * (hi - lo) + lo;
-    console.log(next_value);//xxxxxxx
     variable.value = next_value;
 
     var rotation = "rotate(" + Math.round((next_tick - increments / 2) * (288.0 / increments)) + "deg)";
@@ -517,7 +521,9 @@ function make_control_widget(i, label, variable, lo, hi, def, increments) {
 
     // maybe adjust the color if the setting is off the default.
 
-    return next_tick;
+    var retval = { "tick": next_tick, "value": next_value };
+    console.log(retval);
+    return retval;
   }
 
   fx_adjust_function[id] = adjust;

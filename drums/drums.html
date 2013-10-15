@@ -5,6 +5,8 @@
     <script src="play.js"></script>
     <script src="song.js"></script>
     <script src="timeline.js"></script>
+    <script src="lz-string-1.3.3.js"></script>
+    <script src="base64-string-v1.1.0.js"></script>
     <script>
 
 var context = new webkitAudioContext();
@@ -27,7 +29,7 @@ var play_state = null;
 
 var nav_x = 0;
 var nav_y = 0;
-var MAX_NAV_X = 9;
+var MAX_NAV_X = 10;
 var MAX_NAV_Y = 13;
 
 function loadfn(buffer, url, error_info) {
@@ -243,9 +245,9 @@ function init() {
     ],
                   ]);
 
-  song = create_test_song();//xxxx
-
   init_kit_fx_ui();
+
+  song = song_from_location();
 }
 
 function keydown(ev) {
@@ -312,10 +314,44 @@ var fx_ids = [
   "mute",
 ];
 
+var master_fx_ids = [
+  "dry",
+  "rev",
+  "c_thr",
+  "c_rat",
+  "c_att",
+  "c_rel",
+];
+
+function fx_index_to_id(index) {
+  var channel = index >> 4;
+  var i = index & 4;
+  return nav_to_id(channel, i);
+}
+
+function encode_fx_settings() {
+  var d = "";
+  for (var i = 0; i < 256; i++) {
+    var id = fx_index_to_id(i);
+    if (id) {
+      d += String.fromCharCode(i);
+      var ticks = fx_adjust_function[id](0).ticks;
+      d += String.fromCharCode(ticks);
+    }
+  }
+  return d;
+}
+
 function nav_to_id(x, y) {
-  if (y >= 0 && y < fx_ids.length) {
+  if (x < 9 && y >= 0 && y < fx_ids.length) {
     // fx panel
-    return id = "fx" + String(x) + fx_ids[y];
+    var yi = Math.min(y, fx_ids.length - 1);
+    return id = "fx" + String(x) + fx_ids[yi];
+  }
+  if (x == 9 && y >= 0) {
+    // master fx panel
+    var yi = Math.min(y, master_fx_ids.length - 1);
+    return id = "fx10" + master_fx_ids[yi];
   }
   return '';
 }
@@ -487,6 +523,7 @@ function init_kit_fx_ui() {
   for (var i in channel_names) {
     document.getElementById("fx" + i).appendChild(make_channel_fx_ui(i, channel_names[i]));
   }
+  document.getElementById("fxmaster").appendChild(make_master_fx_ui());
   for (var control in fx_adjust_function) {
     fx_adjust_function[control](0);
   }
@@ -526,7 +563,7 @@ function make_channel_fx_ui(i, label) {
   outer.style.width = "34px";
   outer.innerHTML = label + "<br/>";
   outer.appendChild(make_control_widget(i, 'dt', fx_time_trims[i], -0.050, 0.050, 0));
-  outer.appendChild(make_control_widget(i, 'trim', fx_channel[i].trim.gain, 0, 2, 1));  // log scale?
+  outer.appendChild(make_control_widget(i, 'trim', fx_channel[i].trim.gain, 0, 2, 1));
   outer.appendChild(make_control_widget(i, 'eqhi', fx_channel[i].eqhi.gain, -20, 20, 0));
   outer.appendChild(make_control_widget(i, 'eqmd', fx_channel[i].eqmid.gain, -20, 20, 0));
   outer.appendChild(make_control_widget(i, 'eqsw', fx_channel[i].eqmid.frequency, 200, 8000, 2000, 64, true));
@@ -539,10 +576,24 @@ function make_channel_fx_ui(i, label) {
 
   //outer.appendChild(make_control_widget(i, '_8', fx_channel[i].rev...));//xxxx TODO reverb
 
-  outer.appendChild(make_control_widget(i, 'fade', fx_channel[i].fade.gain, 0, 2, 1));  // log scale?
+  outer.appendChild(make_control_widget(i, 'fade', fx_channel[i].fade.gain, 0, 2, 1));
 
   outer.appendChild(make_toggle_widget(i, "solo", fx_channel[i].solo, "#ffc", "#ff0", false, update_solo_mute));
   outer.appendChild(make_toggle_widget(i, "mute", fx_channel[i].mute, "#fcc", "#f00", false, update_solo_mute));
+
+  return outer;
+}
+
+function make_master_fx_ui() {
+  var outer = document.createElement("div");
+  outer.style.width = "34px";
+  outer.innerHTML = "master<br/>";
+  outer.appendChild(make_control_widget(10, "dry", master_dry_gain.gain, 0, 2, 1));
+  outer.appendChild(make_control_widget(10, "rev", master_verb_gain.gain, 0, 2, 0.30));
+  outer.appendChild(make_control_widget(10, "c_thr", master_comp.threshold, -100, 0, -10));
+  outer.appendChild(make_control_widget(10, 'c_rat', master_comp.ratio, 1, 20, 4, undefined, true));
+  outer.appendChild(make_control_widget(10, 'c_att', master_comp.attack, 0, 1, 0.003));
+  outer.appendChild(make_control_widget(10, 'c_rel', master_comp.release, 0, 1, 0.050));
 
   return outer;
 }
@@ -708,7 +759,7 @@ window.onkeyup = keyup;
     </div>
 
     <table id="kitparams" style="height: 400px;">
-      <tr>
+      <tr valign="top">
         <td id="fx0">
         </td><td id="fx1">
         </td><td id="fx2">
@@ -718,7 +769,9 @@ window.onkeyup = keyup;
         </td><td id="fx6">
         </td><td id="fx7">
         </td><td id="fx8">
-	</td>
+	</td><td width=10><!-- spacer --></td>
+        <td id="fxmaster">
+        </td>
       </tr>
     </table>
   </body>

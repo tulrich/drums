@@ -6,10 +6,26 @@ function create_song() {
     "default_tempo": 120,
     "kit": 0,
     "section": [],
-    "measure": []
+    "measure": [],
+    "measure_reference": [],
   };
+  return song;
 }
 
+function update_location(song) {
+  // Push the encoding of the current song into the URL.
+  var hash = encode_song(song);
+  window.location.hash = "s=" + hash;
+}
+
+function song_from_location() {
+  var hash = window.location.hash;
+  if (hash.substr(0, 2) == "s=") {
+    var song = decode_song(hash.substr(2));
+    if (song) { return song; }
+  }
+  return create_test_song();
+}
 
 function create_test_song() {
   var song = {
@@ -117,40 +133,37 @@ function decode_song(encoded) {
     song.version = version;
   }
 
+  //var lz = new LZ77();
   var state = {
     "error": null,
     "cursor": 0,
-    "data": btoa(encoded.substr(1))
+    //"data": atob(lz.decompress(encoded.substr(1)).replace(/_/g, "="))
+    "data": atob(LZString.decompressFromBase64(encoded.substr(1)).replace(/_/g, "="))
   };
 
   song.default_tempo = read_byte(state);
-  if (state.error) return null;
+  if (state.error) { console.log(state); return null; }
 
   song.kit = read_byte(state);
-  if (state.error) return null;
+  if (state.error) { console.log(state); return null; }
 
   var measure_count = read_byte(state);
-  if (state.error) return null;
+  if (state.error) { console.log(state); return null; }
 
   for (var i = 0; i < measure_count; i++) {
     song.measure.push(decode_measure(state, song));
-    if (state.error) return null;
+    if (state.error) { console.log(state); return null; }
   }
 
   var measure_reference_count = read_byte(state);
-  if (state.error) return;
+  if (state.error) { console.log(state); return null; }
 
   for (var i = 0; i < measure_reference_count; i++) {
     song.measure_reference.push(read_byte(state));
-    if (state.error) return;
+    if (state.error) { console.log(state); return null; }
   }
 
   return song;
-}
-
-
-function decode_section(state, song) {
-  return section;
 }
 
 
@@ -161,13 +174,16 @@ function decode_measure(state, song) {
     "note": []
   };
 
-  // TODO beats & tempo_increment
+  measure.beats = read_byte(state);
+
+  // TODO tempo_increment
+  measure.dt = 0;
 
   var note_count = read_byte(state);
   if (state.error) return measure;
 
   for (var i = 0; i < note_count; i++) {
-    measure.note.push(decode_node(state, song));
+    measure.note.push(decode_note(state, song));
     if (state.error) return measure;
   }
 
@@ -196,4 +212,46 @@ function read_byte(state) {
 
 
 function encode_song(song) {
+  var s = '';
+  s += String.fromCharCode(97 + song.version);
+
+  var data = encode_song_data(song);
+  //var lz = new LZ77();
+  //s += btoa(lz.compress(data)).replace(/=/g, "_");
+  s += LZString.compressToBase64(data).replace(/=/g, "_");
+  return s;
+}
+
+function encode_song_data(song) {
+  var data = '';
+  data += String.fromCharCode(song.default_tempo);
+  data += String.fromCharCode(song.kit);
+  var measure_count = song.measure.length;
+  data += String.fromCharCode(measure_count);
+  for (var i = 0; i < measure_count; i++) {
+    data += encode_measure(song, song.measure[i]);
+  }
+
+  var measure_reference_count = song.measure_reference.length;
+  data += String.fromCharCode(measure_reference_count);
+  for (var i = 0; i < measure_reference_count; i++) {
+    data += String.fromCharCode(song.measure_reference[i]);
+  }
+  return data;
+}
+
+function encode_measure(song, measure) {
+  var data = '';
+  data += String.fromCharCode(measure.beats);
+  // TODO tempo_increment
+  data += String.fromCharCode(measure.note.length);
+  for (var i = 0; i < measure.note.length; i++) {
+    var n = measure.note[i];
+    var t_hi = Math.floor(n.t / 256);
+    var t_lo = n.t - t_hi * 256;
+    data += String.fromCharCode(t_lo) + String.fromCharCode(t_hi);
+    data += String.fromCharCode(n.i);
+    data += String.fromCharCode(n.v);
+  }
+  return data;
 }

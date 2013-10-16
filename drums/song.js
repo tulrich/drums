@@ -6,7 +6,7 @@ function create_song() {
     "default_tempo": 120,
     "kit": 0,
     "section": [],
-    "measure": []
+    "measure": [],
   };
 }
 

@@ -42,10 +42,11 @@ function loadkit(instrument_list) {
     var info_in = instrument_list[i];
     for (layer in info_in) {
       for (volume in info_in[layer]) {
-	load_sample(info_in[layer][volume], loadfn);
+        load_sample(info_in[layer][volume], loadfn);
       }
     }
     kit.push(info_in);
+    console.log(info_in);//xxxxxxx
   }
   return kit;
 }
@@ -90,7 +91,7 @@ function init() {
 //      "samples/lyd3_000_ortf_48k.wav",  //
 //      //"samples/stalbans_a_binaural.wav",  // boomy, but boxy
 //      function(buffer) {
-//	master_verb.buffer = buffer;
+//      master_verb.buffer = buffer;
 //      });
 
   // http://www.echochamber.ch/index.php/tipps-a-freebies/impulseresponses
@@ -98,7 +99,7 @@ function init() {
   load_sample(
       "samples/reverb/quantec_1/concert_h+a.wav",
       function(buffer) {
-	master_verb.buffer = buffer;
+        master_verb.buffer = buffer;
       });
 
   master_verb_gain.gain.value = 0.30;
@@ -172,22 +173,35 @@ function init() {
           );
 
 
+  // 0: kick
+  // 1: snare
+  // 2: hat foot
+  // 3: hat tight
+  // 4: hat loose
+  // 5: hat open
+  // 6: ride
+  // 7: small tom
+  // 8: mid tom
+  // 9: floor tom
+  // 10: small crash
+  // 11: large crash
+  // 12: large china
+
   // http://rhythminmind.net/STN/?page_id=14
   kit = loadkit([
-    [["samples/kick 1 outside - 22in pearl master custom.wav",
-      "samples/kick 2 outside - 22in pearl master custom.wav",
-      "samples/kick 3 outside - 22in pearl master custom.wav",
-      "samples/kick 4 outside - 22in pearl master custom.wav",
-      "samples/kick 5 outside - 22in pearl master custom.wav",
-      "samples/kick 6 outside - 22in pearl master custom.wav"]
-    ],
-    [["samples/snare combined 1 - 14in pearl master custom.wav",
-      "samples/snare combined 2 - 14in pearl master custom.wav",
-      "samples/snare combined 3 - 14in pearl master custom.wav",
-      "samples/snare combined 4 - 14in pearl master custom.wav",
-      "samples/snare combined 5 - 14in pearl master custom.wav",
-      "samples/snare combined 6 - 14in pearl master custom.wav",
-     ]
+    [["samples/kick 1 outside - 22in pearl master custom.wav"],
+     ["samples/kick 2 outside - 22in pearl master custom.wav"],
+     ["samples/kick 3 outside - 22in pearl master custom.wav"],
+     ["samples/kick 4 outside - 22in pearl master custom.wav"],
+     ["samples/kick 5 outside - 22in pearl master custom.wav"],
+     ["samples/kick 6 outside - 22in pearl master custom.wav"],
+     ],
+    [["samples/snare combined 1 - 14in pearl master custom.wav"],
+     ["samples/snare combined 2 - 14in pearl master custom.wav"],
+     ["samples/snare combined 3 - 14in pearl master custom.wav"],
+     ["samples/snare combined 4 - 14in pearl master custom.wav"],
+     ["samples/snare combined 5 - 14in pearl master custom.wav"],
+     ["samples/snare combined 6 - 14in pearl master custom.wav"],
     ],
     [["samples/hat foot 1 - 13in zildjian remix.wav"],
      ["samples/hat foot 2 - 13in zildjian remix.wav"],
@@ -199,7 +213,7 @@ function init() {
      ["samples/hat tight 4 - 13in zildjian remix.wav"],
      ["samples/hat tight 5 - 13in zildjian remix.wav"],
      ["samples/hat tight 6 - 13in zildjian remix.wav"],
-    ],
+     ],
     [["samples/hat loose 1 - 13in zildjian remix.wav"],
      ["samples/hat loose 2 - 13in zildjian remix.wav"],
      ["samples/hat loose 3 - 13in zildjian remix.wav"],
@@ -241,17 +255,43 @@ function init() {
      ["samples/floor tom 5 - 14in pearl master custom.wav"],
      ["samples/floor tom 6 - 14in pearl master custom.wav"],
     ],
+    [["samples/small crash 1 - 16in zildjian.wav"],
+     ["samples/small crash 2 - 16in zildjian.wav"],
+     ["samples/small crash 3 - 16in zildjian.wav"],
+     ["samples/small crash 4 - 16in zildjian.wav"],
+     ["samples/small crash 5 - 16in zildjian.wav"],
+     ["samples/small crash 6 - 16in zildjian.wav"],
+     ],
+    [["samples/large crash 1 - 18in zildjian.wav"],
+     ["samples/large crash 2 - 18in zildjian.wav"],
+     ["samples/large crash 3 - 18in zildjian.wav"],
+     ["samples/large crash 4 - 18in zildjian.wav"],
+     ["samples/large crash 5 - 18in zildjian.wav"],
+     ["samples/large crash 6 - 18in zildjian.wav"],
+     ],
+    [["samples/large china 1 - 22in zildjian.wav"],
+     ["samples/large china 2 - 22in zildjian.wav"],
+     ["samples/large china 3 - 22in zildjian.wav"],
+     ["samples/large china 4 - 22in zildjian.wav"],
+     ["samples/large china 5 - 22in zildjian.wav"],
+     ["samples/large china 6 - 22in zildjian.wav"],
+     ],
                   ]);
 
   song = create_test_song();//xxxx
 
   init_kit_fx_ui();
+  init_timeline();
 }
 
 function keydown(ev) {
-  console.log(ev.keyCode);
   if (ev.keyCode >= 48 && ev.keyCode <= 57) {  // '0' - '9'
-    play(ev.keyCode - 48, 255.0, 0.010);
+    var instrument = ev.keyCode - 48;
+    if (ev.shiftKey) {
+      instrument += 10;
+    }
+    console.log(instrument);
+    play(instrument, 255.0, 0.010);
   } else if (ev.keyCode == 32) {  // space
     toggle_play();
   } else if (ev.keyCode == 38) {  // up
@@ -374,7 +414,9 @@ var fx_channel_assignments = [
   [4, 7, 8],  // htom
   [5, 7, 8],  // mtom
   [6, 7, 8],  // ltom
-  // TODO crashes etc
+  [7, 8],  // small crash
+  [7, 8],  // large crash
+  [7, 8],  // china crash
 ];
 
 function play(instrument, volume, time) {
@@ -481,9 +523,9 @@ function init_kit_fx_ui() {
   styles.addRule(".knob32", rule);
 
   var channel_names = [ "kick", "snare", "hat", "ride",
-			"htom", "mtom", "ltom",
-			"OH", "room"
-			 ];
+                        "htom", "mtom", "ltom",
+                        "OH", "room"
+                         ];
   for (var i in channel_names) {
     document.getElementById("fx" + i).appendChild(make_channel_fx_ui(i, channel_names[i]));
   }
@@ -525,21 +567,21 @@ function make_channel_fx_ui(i, label) {
   var outer = document.createElement("div");
   outer.style.width = "34px";
   outer.innerHTML = label + "<br/>";
-  outer.appendChild(make_control_widget(i, 'dt', fx_time_trims[i], -0.050, 0.050, 0));
-  outer.appendChild(make_control_widget(i, 'trim', fx_channel[i].trim.gain, 0, 2, 1));  // log scale?
-  outer.appendChild(make_control_widget(i, 'eqhi', fx_channel[i].eqhi.gain, -20, 20, 0));
-  outer.appendChild(make_control_widget(i, 'eqmd', fx_channel[i].eqmid.gain, -20, 20, 0));
-  outer.appendChild(make_control_widget(i, 'eqsw', fx_channel[i].eqmid.frequency, 200, 8000, 2000, 64, true));
-  outer.appendChild(make_control_widget(i, 'eqlo', fx_channel[i].eqlo.gain, -20, 20, 0));
+  outer.appendChild(make_knob_widget(i, 'dt', fx_time_trims[i], -0.050, 0.050, 0));
+  outer.appendChild(make_knob_widget(i, 'trim', fx_channel[i].trim.gain, 0, 2, 1));  // log scale?
+  outer.appendChild(make_knob_widget(i, 'eqhi', fx_channel[i].eqhi.gain, -20, 20, 0));
+  outer.appendChild(make_knob_widget(i, 'eqmd', fx_channel[i].eqmid.gain, -20, 20, 0));
+  outer.appendChild(make_knob_widget(i, 'eqsw', fx_channel[i].eqmid.frequency, 200, 8000, 2000, 64, true));
+  outer.appendChild(make_knob_widget(i, 'eqlo', fx_channel[i].eqlo.gain, -20, 20, 0));
 
-  outer.appendChild(make_control_widget(i, 'c_thr', fx_channel[i].comp.threshold, -100, 0, 0));
-  outer.appendChild(make_control_widget(i, 'c_rat', fx_channel[i].comp.ratio, 1, 20, 2, undefined, true));
-  outer.appendChild(make_control_widget(i, 'c_att', fx_channel[i].comp.attack, 0, 1, 0.100));
-  outer.appendChild(make_control_widget(i, 'c_rel', fx_channel[i].comp.release, 0, 1, 0.250));
+  outer.appendChild(make_knob_widget(i, 'c_thr', fx_channel[i].comp.threshold, -100, 0, 0));
+  outer.appendChild(make_knob_widget(i, 'c_rat', fx_channel[i].comp.ratio, 1, 20, 2, undefined, true));
+  outer.appendChild(make_knob_widget(i, 'c_att', fx_channel[i].comp.attack, 0, 1, 0.100));
+  outer.appendChild(make_knob_widget(i, 'c_rel', fx_channel[i].comp.release, 0, 1, 0.250));
 
-  //outer.appendChild(make_control_widget(i, '_8', fx_channel[i].rev...));//xxxx TODO reverb
+  //outer.appendChild(make_knob_widget(i, '_8', fx_channel[i].rev...));//xxxx TODO reverb
 
-  outer.appendChild(make_control_widget(i, 'fade', fx_channel[i].fade.gain, 0, 2, 1));  // log scale?
+  outer.appendChild(make_knob_widget(i, 'fade', fx_channel[i].fade.gain, 0, 2, 1));  // log scale?
 
   outer.appendChild(make_toggle_widget(i, "solo", fx_channel[i].solo, "#ffc", "#ff0", false, update_solo_mute));
   outer.appendChild(make_toggle_widget(i, "mute", fx_channel[i].mute, "#fcc", "#f00", false, update_solo_mute));
@@ -547,14 +589,14 @@ function make_channel_fx_ui(i, label) {
   return outer;
 }
 
-function make_control_widget(i, label, variable, lo, hi, def, opt_increments, opt_logscale) {
+function make_knob_widget(i, label, variable, lo, hi, def, opt_increments, opt_logscale) {
   var d = document.createElement("div");
   d.setAttribute("class", "control");
   var id = "fx" + i + label;
   d.innerHTML = "<div style='height: 32px; display: table-cell; vertical-align: " +
-      "middle; text-align: center;'><a href='javascript:void(0);' class='knob32anchor'> </a>" +
+      "middle;'><a href='javascript:void(0);' class='knob32anchor'> </a>" +
       "<div class='knob32' id='" + id +
-	  "' style='height: 32px;'></div><p class='knoblabel'>" + label + "</p></div>";
+          "' style='height: 32px;'></div><p class='knoblabel'>" + label + "</p></div>";
 
   var increments = opt_increments || 32;
   var logscale = opt_logscale || false;
@@ -605,9 +647,9 @@ function make_toggle_widget(i, label, variable, color_off, color_on, def, update
   d.setAttribute("class", "control");
   d.style.height = "16px";
   var id = "fx" + i + label;
-  d.innerHTML = "<div style='height: 16px; text-align: center;'><a href='javascript:void(0);' class='toggle32anchor'> </a>" +
+  d.innerHTML = "<div style='height: 16px;'><a href='javascript:void(0);' class='toggle32anchor'> </a>" +
       "<div class='toggle32' id='" + id +
-	  "' style='height: 16px;'></div><p class='togglelabel'>" + label + "</p></div>";
+      "' style='height: 16px;'></div><p class='togglelabel'>" + label + "</p></div>";
 
   var adjust = function(increment) {
     var current_value = variable.value;
@@ -669,42 +711,44 @@ window.onkeyup = keyup;
         margin-right: auto;
       }
       .knob32anchor {
-	position: absolute;
+        position: absolute;
         width: 32px;
-	height: 32px;
+        height: 32px;
       }
       .knob32anchor:focus {
-	//background-color: yellow;
-	border: 2px solid yellow;
+        //background-color: yellow;
+        border: 2px solid yellow;
       }
       .togglelabel {
-	width: 32px;
-	position: relative;
-	font-size: 10px;
-	font-family: sans-serif;
-	text-align: center;
-	margin-left: auto;
-	margin-right: auto;
+        width: 32px;
+        position: relative;
+        font-size: 10px;
+        font-family: sans-serif;
+        text-align: center;
+        margin-left: auto;
+        margin-right: auto;
       }
 
       .toggle32 {
-	position: absolute;
-	width: 32px;
-	height: 16px;
+        position: absolute;
+        width: 32px;
+        height: 16px;
       }
       .toggle32anchor {
-	position: absolute;
-	width: 32px;
-	height: 16px;
+        position: absolute;
+        width: 32px;
+        height: 16px;
       }
       .toggle32anchor:focus {
-	border: 2px solid yellow;
+        border: 2px solid yellow;
       }
     </style>
   </head>
   <body>
 
-    <div id="timeline" style="height: 200px">
+    <div id="timeline" style="height: 200px; width: 800px;">
+      <canvas id="timeline_canvas" width="800" height="200" style="position:absolute;"/>
+      <canvas id="timeline_overlay_canvas" width="800" height="200" style="position:absolute;"/>
     </div>
 
     <table id="kitparams" style="height: 400px;">
@@ -718,7 +762,7 @@ window.onkeyup = keyup;
         </td><td id="fx6">
         </td><td id="fx7">
         </td><td id="fx8">
-	</td>
+        </td>
       </tr>
     </table>
   </body>

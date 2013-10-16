@@ -50,6 +50,7 @@ function queue_more(song, dt, state) {
     measure_t = measure_end_t;
   }
   state.t = t1;
+  update_timeline_view();
 }
 
 function queue_measure(measure, measure_t, measure_end_t, t0, t1, state) {

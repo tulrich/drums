@@ -17,6 +17,7 @@ var master_comp = null;
 var fx_channel = [];
 var fx_time_trims = [];
 var fx_adjust_function = {};
+var fx_solo_channel = -1;
 
 var sound_source = null;
 var buffer = null;
@@ -281,7 +282,9 @@ function init() {
                   ]);
 
   init_kit_fx_ui();
-  song = song_from_location();
+  var info = song_from_location();
+  song = info.song;
+  set_fx_settings(info.fx);
   init_timeline();
 }
 
@@ -363,22 +366,9 @@ var master_fx_ids = [
 ];
 
 function fx_index_to_id(index) {
-  var channel = index >> 4;
-  var i = index & 4;
+  var channel = (index >> 4);
+  var i = index & 15;
   return nav_to_id(channel, i);
-}
-
-function encode_fx_settings() {
-  var d = "";
-  for (var i = 0; i < 256; i++) {
-    var id = fx_index_to_id(i);
-    if (id) {
-      d += String.fromCharCode(i);
-      var ticks = fx_adjust_function[id](0).ticks;
-      d += String.fromCharCode(ticks);
-    }
-  }
-  return d;
 }
 
 function nav_to_id(x, y) {
@@ -434,7 +424,8 @@ function do_increment(ticks) {
   var id = nav_to_id(nav_x, nav_y);
   var adjust_fn = fx_adjust_function[id];
   if (adjust_fn) {
-    adjust_fn(ticks);
+    var result = adjust_fn(ticks);
+    console.log(result);//xxxx
   }
 }
 
@@ -474,7 +465,10 @@ function rawplay(url, volume, time, channels) {
     var gain = context.createGain();
     gain.gain.value = volume / 255.0;
     for (i in channels) {
-      gain.connect(fx_channel[channels[i]].trim);
+      var chan = channels[i];
+      if (solo_channel < 0 || chan == solo_channel) {
+	gain.connect(fx_channel[chan].trim);
+      }
     }
     src.connect(gain);
 
@@ -506,18 +500,36 @@ function load_sample(url, continuation) {
   request.send();
 }
 
-function update_solo_mute() {
+function update_solo_mute(id, channel) {
   // solo > mute
   // If any solos are pressed, connect them and disconnect others.
+  // Only one solo channel allowed at a time.
   // Mute anything that's muted and not solo'd
 
+  if (channel >= 0 && fx_channel[channel].solo.value) {
+    solo_channel = channel;
+    // Force any other solos off.
+    for (var i = 0; i < fx_channel.length; i++) {
+      if (i != channel) {
+	if (fx_channel[i].solo.value) {
+	  // Toggle it off.
+	  fx_adjust_function["fx" + i + "solo"](-1);
+	}
+      }
+    }
+  }
   var any_solos = false;
   for (var i = 0; i < fx_channel.length; i++) {
-    if (fx_channel[i].solo.value) any_solos = true;
+    if (fx_channel[i].solo.value) {
+      any_solos = true;
+    }
+  }
+  if (!any_solos) {
+    solo_channel = -1;
   }
 
   for (var i = 0; i < fx_channel.length; i++) {
-    if ((any_solos && !fx_channel[i].solo.value) || fx_channel[i].mute.value) {
+    if ((solo_channel >= 0 && i != solo_channel) || fx_channel[i].mute.value) {
       // Mute.
       fx_channel[i].fade.disconnect(master_verb);
       fx_channel[i].fade.disconnect(master_dry_gain);
@@ -570,10 +582,14 @@ function init_kit_fx_ui() {
   }
 
   // Set default params...
-  var fx_defaults = {
+  set_fx_settings(create_default_fx());
+}
+
+function create_default_fx() {
+  return {
     "fx0eqmd": 9,
     "fx0eqsw": 16,
-    "fx0eqlo": 21,
+    "fx0eqlo": 16,
     "fx0c_thr": 29,
     "fx0c_rat": 15,
     "fx0c_att": 4,
@@ -589,10 +605,22 @@ function init_kit_fx_ui() {
     "fx7fade": 4,
     "fx8fade": 4,
   };
-  set_fx_params(fx_defaults);
 }
 
-function set_fx_params(params) {
+function get_fx_settings() {
+  var fx = [];
+  for (var i = 0; i < 256; i++) {
+    var id = fx_index_to_id(i);
+    if (id) {
+      var info = fx_adjust_function[id](0);
+      var tick = info.tick;
+      fx[id] = tick;
+    }
+  }
+  return fx;
+}
+
+function set_fx_settings(params) {
   for (var p in params) {
     fx_adjust_function[p](-100);  // Set it to 0.
     fx_adjust_function[p](params[p]);  // Set the value.
@@ -681,7 +709,6 @@ function make_knob_widget(i, label, variable, lo, hi, def, opt_increments, opt_l
     }
 
     var retval = { "tick": next_tick, "value": next_value };
-    console.log(retval);
     return retval;
   }
 
@@ -710,12 +737,10 @@ function make_toggle_widget(i, label, variable, color_off, color_on, def, update
     var elem = document.getElementById(id);
     if (elem) {
       elem.style.backgroundColor = next_value ? color_on : color_off;
-      console.log(elem.style.backgroundColor, color_on, color_off);//xxxxxxx
     }
 
-    var retval = { "value": next_value };
-    console.log(retval);
-    if (update_closure) update_closure();
+    var retval = { "value": next_value, "tick": Number(next_value) };
+    if (update_closure) update_closure(id, i);
     return retval;
   }
 
@@ -797,8 +822,8 @@ window.onkeyup = keyup;
   <body>
 
     <div id="timeline" style="height: 200px; width: 800px;">
-      <canvas id="timeline_canvas" width="800" height="200" style="position:absolute;"/>
-      <canvas id="timeline_overlay_canvas" width="800" height="200" style="position:absolute;"/>
+      <canvas id="timeline_canvas" width="800" height="200" style="position:absolute;"></canvas>
+      <canvas id="timeline_overlay_canvas" width="800" height="200" style="position:absolute;"></canvas>
     </div>
 
     <table id="kitparams" style="height: 400px;">

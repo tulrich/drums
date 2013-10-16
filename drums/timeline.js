@@ -1,8 +1,11 @@
 // timeline.js
 
+var MEASURE_WIDTH = 200;
+var MEASURE_HEIGHT = 200;
 var timeline_context;
 var timeline_overlay_context;
-var measure0 = 0;
+var last_measure0 = -1;
+var measure_position = 0;
 
 function init_timeline() {
   var canvas = document.getElementById("timeline_canvas");
@@ -12,13 +15,60 @@ function init_timeline() {
   var overlay_canvas = document.getElementById("timeline_overlay_canvas");
   timeline_overlay_context = overlay_canvas.getContext("2d");
 
-  // Initial song view.
-  for (var i = 0; i < 4; i++) {
-    var mi = measure0 + i;
-    if (mi < song.measure.length) {
-      show_measure(song.measure[mi], timeline_context, i * 400, 0, 400, 200);
+  update_timeline_view();
+}
+
+function update_measure_position() {
+  if (!play_state || !song) {
+    measure_position = 0;
+    return;
+  }
+  measure_position = get_song_measure_position(song, play_state.t);
+}
+
+function update_timeline_view() {
+  update_measure_position();
+  var measure0 = Math.floor(measure_position);
+  if (measure0 != last_measure0) {
+    measure0 = last_measure0;
+    show_song();
+  }
+  show_overlay();
+}
+
+function show_song() {
+  if (!song) return;
+  timeline_context.clearRect(0, 0, 800, 200);
+  var x0 = -MEASURE_WIDTH / 2;
+  var measure0 = Math.floor(measure_position);
+  for (var i = 0; i < 5; i++) {
+    var mi = measure0 - 1 + i;
+    if (mi >= 0 && mi < song.measure_reference.length) {
+      var measure = song.measure[song.measure_reference[mi]];
+      show_measure(measure, timeline_context,
+		   x0 + i * MEASURE_WIDTH, 0, MEASURE_WIDTH, MEASURE_HEIGHT);
     }
   }
+}
+
+function show_overlay() {
+  update_measure_position();
+  timeline_overlay_context.clearRect(0, 0, 800, 200);
+  var measure0 = Math.floor(measure_position);
+  var f = measure_position - measure0;
+  var x0 = -MEASURE_WIDTH / 2 + 1 * MEASURE_WIDTH - 0.5;
+
+  timeline_overlay_context.beginPath();
+  timeline_overlay_context.strokeStyle = "#00f";
+  timeline_overlay_context.strokeRect(x0, 0.5, MEASURE_WIDTH, MEASURE_HEIGHT - 0.5);
+  timeline_overlay_context.stroke();
+
+  timeline_overlay_context.beginPath();
+  timeline_overlay_context.strokeStyle = "#000";  // xxxx dashed";
+  var x = x0 + f * MEASURE_WIDTH;
+  timeline_overlay_context.moveTo(x, 0);
+  timeline_overlay_context.lineTo(x, MEASURE_HEIGHT);
+  timeline_overlay_context.stroke();
 }
 
 function show_measure(measure, context, x, y, w, h) {
@@ -51,15 +101,16 @@ function update_measure_view(measure) {
 
   // Beat lines.
   var ctx = measure.viewdata.ctx;
-  ctx.strokeStyle = "#888";
+  ctx.strokeStyle = "#999";
   for (var i = 0; i < measure.beats; i++) {
+    ctx.beginPath();
     ctx.moveTo(beat_width * i + 0.5, 0.5);
     ctx.lineTo(beat_width * i + 0.5, MEASURE_CANVAS_HEIGHT + 0.5);
+    ctx.stroke();
     if (i == 0) {
       ctx.strokeStyle = "#ddd";
     }
   }
-  ctx.stroke();
 
   // Notes.
   var measure_ticks = 4096 * measure.beats;

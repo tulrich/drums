@@ -30,8 +30,9 @@ var play_state = null;
 
 var nav_x = 0;
 var nav_y = 0;
+var NOTES_NAV_Y = 4;
 var MAX_NAV_X = 10;
-var MAX_NAV_Y = 13;
+var MAX_NAV_Y = 13 + NOTES_NAV_Y;
 
 function loadfn(buffer, url, error_info) {
   if (buffer) {
@@ -49,7 +50,6 @@ function loadkit(instrument_list) {
       }
     }
     kit.push(info_in);
-    console.log(info_in);//xxxxxxx
   }
   return kit;
 }
@@ -294,7 +294,9 @@ function keydown(ev) {
     if (ev.shiftKey) {
       instrument += 10;
     }
-    console.log(instrument);
+    if (nav_y < NOTES_NAV_Y) {
+      toggle_notes(instrument, nav_x, nav_y);
+    }
     play(instrument, 255.0, 0.010);
   } else if (ev.keyCode == 32) {  // space
     toggle_play();
@@ -368,18 +370,18 @@ var master_fx_ids = [
 function fx_index_to_id(index) {
   var channel = (index >> 4);
   var i = index & 15;
-  return nav_to_id(channel, i);
+  return nav_to_fx_id(channel, i + NOTES_NAV_Y);
 }
 
-function nav_to_id(x, y) {
-  if (x < 9 && y >= 0 && y < fx_ids.length) {
-    // fx panel
-    var yi = Math.min(y, fx_ids.length - 1);
+function nav_to_fx_id(x, y) {
+  if (x < 9 && y >= NOTES_NAV_Y && y < NOTES_NAV_Y + fx_ids.length) {
+    // channel fx panel
+    var yi = Math.min(y - NOTES_NAV_Y, fx_ids.length - 1);
     return id = "fx" + String(x) + fx_ids[yi];
   }
-  if (x == 9 && y >= 0) {
+  if (x == 9 && y >= NOTES_NAV_Y) {
     // master fx panel
-    var yi = Math.min(y, master_fx_ids.length - 1);
+    var yi = Math.min(y - NOTES_NAV_Y, master_fx_ids.length - 1);
     return id = "fx10" + master_fx_ids[yi];
   }
   return '';
@@ -390,13 +392,19 @@ function focus_nav() {
   if (nav_x >= MAX_NAV_X) { nav_x = 0; }
   if (nav_y < 0) { nav_y = MAX_NAV_Y - 1; }
   if (nav_y >= MAX_NAV_Y) { nav_y = 0; }
-  var id = nav_to_id(nav_x, nav_y);
-  if (!id) {
-    console.log("bad nav!", nav_x, nav_y);
-    return;
+  show_overlay();  // Update timeline nav.
+  if (nav_y >= NOTES_NAV_Y) {
+    // FX navigation
+    var id = nav_to_fx_id(nav_x, nav_y);
+    if (!id) {
+      console.log("bad nav!", nav_x, nav_y);
+      return;
+    }
+    var elem = document.getElementById(id);
+    elem.previousSibling.focus();
+  } else {
+    // Some kind of blur.
   }
-  var elem = document.getElementById(id);
-  elem.previousSibling.focus();
 }
 
 function nav_up() {
@@ -421,11 +429,18 @@ function nav_right() {
 
 function do_increment(ticks) {
   focus_nav();
-  var id = nav_to_id(nav_x, nav_y);
-  var adjust_fn = fx_adjust_function[id];
-  if (adjust_fn) {
-    var result = adjust_fn(ticks);
-    console.log(result);//xxxx
+  if (nav_y < NOTES_NAV_Y) {
+    adjust_notes(ticks, nav_x, nav_y);
+  } else {
+    // fx panel
+    var id = nav_to_fx_id(nav_x, nav_y);
+    if (id) {
+      var adjust_fn = fx_adjust_function[id];
+      if (adjust_fn) {
+	var result = adjust_fn(ticks);
+	console.log(result);//xxxx
+      }
+    }
   }
 }
 

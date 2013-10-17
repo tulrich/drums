@@ -51,24 +51,112 @@ function show_song() {
   }
 }
 
+function adjust_notes(ticks, nav_x, nav_y) {
+}
+
+function toggle_notes(inst, nav_x, nav_y) {
+  var freq = 1 << (NOTES_NAV_Y - 1 - nav_y);
+  var phase = nav_x;
+  var phase_wrapped = (phase & ((1 << nav_y) - 1));
+
+  var x = phase_wrapped;
+  var interval = 8 / freq;
+
+  var measure0 = Math.floor(measure_position);
+  if (measure0 >= song.measure_reference.length) {
+    return;  // no-op
+  }
+
+  var mi = song.measure_reference[measure0];
+  var measure = song.measure[mi];
+
+  var on_or_off = undefined;
+  for (var i = 0; i < freq; i++) {
+    on_or_off = toggle_note(on_or_off, measure, inst, x * 2048);
+    x += interval;
+  }
+  if (measure.viewdata) {
+    measure.viewdata.dirty = true;
+  }
+  show_song();
+}
+
+function toggle_note(on_or_off, measure, inst, t) {
+  // Existing note?
+  var new_note = null;
+  for (var i = 0; i < measure.note.length; i++) {
+    var n = measure.note[i];
+    if (n.i == inst && n.t >= t - 1024 && n.t < t + 1024) {
+      // Match!
+      if (!on_or_off) {
+	// Erase this note.
+	measure.note.splice(i, 1);
+	return false;
+      } else {
+	// Modify this note.
+	n.t = t;
+	n.v = 255;
+	sort_notes_by_t(measure);
+	return true;
+      }
+    }
+  }
+  if (on_or_off === undefined) {
+    on_or_off = true;
+  }
+
+  if (on_or_off) {
+    measure.note.push({
+      "i": inst,
+      "t": t,
+      "v": 255
+    });
+    sort_notes_by_t(measure);
+  }
+  return on_or_off;
+}
+
+function sort_notes_by_t(measure) {
+  measure.note.sort(function(a, b) { if (a.t < b.t) return -1; else if (a.t > b.t) return 1; else return 0; });
+}
+
 function show_overlay() {
   update_measure_position();
-  timeline_overlay_context.clearRect(0, 0, 800, 200);
+  var ctx = timeline_overlay_context;
+  ctx.clearRect(0, 0, 800, 200);
   var measure0 = Math.floor(measure_position);
   var f = measure_position - measure0;
   var x0 = -MEASURE_WIDTH / 2 + 1 * MEASURE_WIDTH - 0.5;
 
-  timeline_overlay_context.beginPath();
-  timeline_overlay_context.strokeStyle = "#00f";
-  timeline_overlay_context.strokeRect(x0, 0.5, MEASURE_WIDTH, MEASURE_HEIGHT - 0.5);
-  timeline_overlay_context.stroke();
+  // Blue measure box.
+//  ctx.beginPath();
+//  ctx.strokeStyle = "#00f";
+//  ctx.strokeRect(x0, 0.5, MEASURE_WIDTH, MEASURE_HEIGHT - 0.5);
+//  ctx.stroke();
 
-  timeline_overlay_context.beginPath();
-  timeline_overlay_context.strokeStyle = "#000";  // xxxx dashed";
+  ctx.beginPath();
+  ctx.strokeStyle = "#000";  // xxxx dashed";
   var x = x0 + f * MEASURE_WIDTH;
-  timeline_overlay_context.moveTo(x, 0);
-  timeline_overlay_context.lineTo(x, MEASURE_HEIGHT);
-  timeline_overlay_context.stroke();
+  ctx.moveTo(x, 0);
+  ctx.lineTo(x, MEASURE_HEIGHT);
+  ctx.stroke();
+
+  // Highlight relevant notes.
+  if (nav_y < NOTES_NAV_Y) {
+    var freq = 1 << (NOTES_NAV_Y - 1 - nav_y);
+    var phase = nav_x;
+    var phase_wrapped = (phase & ((1 << nav_y) - 1));
+
+    var x = (MEASURE_WIDTH / 8) * phase_wrapped + x0;
+    var interval = MEASURE_WIDTH / freq;
+    ctx.strokeStyle = "#00f";
+    for (var i = 0; i < freq; i++) {
+      ctx.beginPath();
+      ctx.strokeRect(x, 0, 7, MEASURE_HEIGHT);
+      ctx.stroke();
+      x += interval;
+    }
+  }
 }
 
 function show_measure(measure, context, x, y, w, h) {
@@ -101,6 +189,7 @@ function update_measure_view(measure) {
 
   // Beat lines.
   var ctx = measure.viewdata.ctx;
+  ctx.clearRect(0, 0, MEASURE_CANVAS_WIDTH, MEASURE_CANVAS_HEIGHT);
   ctx.strokeStyle = "#999";
   for (var i = 0; i < measure.beats; i++) {
     ctx.beginPath();

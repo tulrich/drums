@@ -143,6 +143,12 @@ function show_overlay() {
 
   // Highlight relevant notes.
   if (nav_y < NOTES_NAV_Y) {
+    ctx.beginPath();
+    ctx.strokeStyle = "#00f";
+    ctx.moveTo((MEASURE_WIDTH / 8) * nav_x + x0, 1.5);
+    ctx.lineTo((MEASURE_WIDTH / 8) * nav_x + x0 + 7, 1.5);
+    ctx.stroke();
+
     var freq = 1 << (NOTES_NAV_Y - 1 - nav_y);
     var phase = nav_x;
     var phase_wrapped = (phase & ((1 << nav_y) - 1));

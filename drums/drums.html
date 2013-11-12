@@ -14,6 +14,7 @@ var master_verb = null;
 var master_verb_gain = null;
 var master_dry_gain = null;
 var master_comp = null;
+var master_meter = null;
 var fx_channel = [];
 var fx_time_trims = [];
 var fx_adjust_function = {};
@@ -21,6 +22,9 @@ var fx_solo_channel = -1;
 
 var sound_source = null;
 var buffer = null;
+var meter_update_functions = [];
+var meter_timeout = -1;
+var meter_pause_countup = 0;
 
 var sounds = {};
 var kit = null;
@@ -72,15 +76,17 @@ function init() {
   sound_source.start(0);
 
   // Master fx etc.
+  master_dry_gain = context.createGain();
   master_verb = context.createConvolver();
   master_verb_gain = context.createGain();
   master_comp = context.createDynamicsCompressor();
-  master_dry_gain = context.createGain();
+  master_meter = context.createAnalyser();
 
-  master_comp.connect(context.destination);
   master_dry_gain.connect(master_comp);
   master_verb.connect(master_verb_gain);
   master_verb_gain.connect(master_comp);
+  master_comp.connect(context.destination);
+  master_comp.connect(master_meter);
 
   // http://www.openairlib.net/auralizationdb/content/stairway-university-york
   // http://www.openairlib.net/auralizationdb/content/maes-howe
@@ -128,6 +134,7 @@ function init() {
       "comp": context.createDynamicsCompressor(),
       "rev": context.createConvolver(),
       "fade": context.createGain(),
+      "meter": context.createAnalyser(),
       "solo": { value: false },
       "mute": { value: false },
     };
@@ -137,6 +144,7 @@ function init() {
     fx.eqlo.connect(fx.comp);
     fx.comp.connect(fx.rev);
     fx.rev.connect(fx.fade);
+    fx.fade.connect(fx.meter);
     fx.fade.connect(master_verb);
     fx.fade.connect(master_dry_gain);
 
@@ -505,6 +513,28 @@ function rawplay(url, volume, time, channels) {
       time = context.currentTime + 0.010;
     }
     src.start(time);
+
+    check_meters();
+  }
+}
+
+function check_meters() {
+  meter_pause_countup = 0;
+  if (meter_timeout == -1) {
+    meter_timeout = window.setTimeout(update_meters, 50);
+  }
+}
+
+function update_meters() {
+  meter_timeout = -1;
+  meter_pause_countup++;
+
+  for (var i = 0; i < meter_update_functions.length; i++) {
+    meter_update_functions[i]();
+  }
+
+  if (meter_pause_countup < 80) {
+    meter_timeout = window.setTimeout(update_meters, 50);
   }
 }
 
@@ -679,6 +709,8 @@ function make_channel_fx_ui(i, label) {
   outer.appendChild(make_toggle_widget(i, "solo", fx_channel[i].solo, "#ffc", "#ff0", false, update_solo_mute));
   outer.appendChild(make_toggle_widget(i, "mute", fx_channel[i].mute, "#fcc", "#f00", false, update_solo_mute));
 
+  outer.appendChild(make_meter_widget(fx_channel[i].meter));
+
   return outer;
 }
 
@@ -692,6 +724,8 @@ function make_master_fx_ui() {
   outer.appendChild(make_knob_widget(10, 'c_rat', master_comp.ratio, 1, 20, 4, undefined, true));
   outer.appendChild(make_knob_widget(10, 'c_att', master_comp.attack, 0, 1, 0.003));
   outer.appendChild(make_knob_widget(10, 'c_rel', master_comp.release, 0, 1, 0.050));
+
+  outer.appendChild(make_meter_widget(master_meter));
 
   return outer;
 }
@@ -781,6 +815,61 @@ function make_toggle_widget(i, label, variable, color_off, color_on, def, update
   return d;
 }
 
+function make_meter_widget(analyzer) {
+  var d = document.createElement("div");
+  d.setAttribute("class", "gauge32");
+  d.style.height = "32px";
+  d.innerHTML = "<canvas width='32' height='32'></canvas>";
+
+  analyzer.smoothingTimeConstant = 0.2;
+  var canvas = d.firstChild;
+  var ctx = canvas.getContext('2d');
+  var freqdata = new Uint8Array(1024);
+  var smoothed_avg = 0;
+//  var update = function() {
+//    analyzer.getByteFrequencyData(freqdata);
+//    var sum2 = 0;
+//    for (var i = 0; i < freqdata.length; i++) {
+//      sum2 += freqdata[i];
+//    }
+//    var avg = sum2 / freqdata.length;
+//    smoothed_avg = avg * 0.5 + smoothed_avg * 0.5;
+//
+//    var fast_y = 32 - avg * 32.0 / 128;
+//    var smoothed_y = 32 - smoothed_avg * 32.0 / 128;
+//
+//    ctx.clearRect(0, 0, 32, 32);
+//    ctx.fillStyle = "#000";
+//    ctx.fillRect(0, 0, 32, smoothed_y);
+//    ctx.fillStyle = "#fff";
+//    ctx.fillRect(0, fast_y, 32, 1);
+//  }
+
+  var sums = new Float32Array(32);
+  var update = function() {
+    analyzer.getByteFrequencyData(freqdata);
+    for (var i = 0; i < 32; i++) {
+      sums[i] = 0;
+    }
+    for (var i = 0; i < freqdata.length; i++) {
+      sums[Math.floor(i * 32 / freqdata.length)] += freqdata[i];
+    }
+
+    ctx.clearRect(0, 0, 32, 32);
+    ctx.fillStyle = "#000";
+    for (var i = 0; i < 32; i++) {
+      var avg = sums[i] * 32 / freqdata.length;
+      var fast_y = 32 - avg * 32.0 / 128;
+
+      ctx.fillRect(i, 0, 1, fast_y);
+    }
+  }
+
+  meter_update_functions.push(update);
+
+  return d;
+}
+
 window.onload = init;
 window.onkeydown = keydown;
 window.onkeyup = keyup;
@@ -796,10 +885,7 @@ window.onkeyup = keyup;
         height: 38px;
       }
       .gauge32 {
-        position: absolute;
-        top: 0;
         height: 32px;
-        left: 0;
         width: 32px;
         background-size: 8px 32px;
         background-position: bottom;

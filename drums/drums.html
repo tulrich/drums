@@ -81,12 +81,19 @@ function init() {
   master_verb_gain = context.createGain();
   master_comp = context.createDynamicsCompressor();
   master_meter = context.createAnalyser();
+  var delay1 = context.createDelay(0.020);
+  var delay2 = context.createDelay(0.020);
+  delay1.delayTime = 0.020;
+  delay2.delayTime = 0.020;
 
   master_dry_gain.connect(master_comp);
   master_verb.connect(master_verb_gain);
   master_verb_gain.connect(master_comp);
   master_comp.connect(context.destination);
   master_comp.connect(master_meter);
+  master_comp.connect(delay1);
+  delay1.connect(master_meter);
+  delay2.connect(master_meter);
 
   // http://www.openairlib.net/auralizationdb/content/stairway-university-york
   // http://www.openairlib.net/auralizationdb/content/maes-howe
@@ -521,7 +528,7 @@ function rawplay(url, volume, time, channels) {
 function check_meters() {
   meter_pause_countup = 0;
   if (meter_timeout == -1) {
-    meter_timeout = window.setTimeout(update_meters, 50);
+    meter_timeout = window.setTimeout(update_meters, 25);
   }
 }
 
@@ -534,7 +541,7 @@ function update_meters() {
   }
 
   if (meter_pause_countup < 80) {
-    meter_timeout = window.setTimeout(update_meters, 50);
+    meter_timeout = window.setTimeout(update_meters, 25);
   }
 }
 
@@ -815,53 +822,63 @@ function make_toggle_widget(i, label, variable, color_off, color_on, def, update
   return d;
 }
 
+function log2(x) {
+  return Math.log(x) / Math.log(2);
+}
+
 function make_meter_widget(analyzer) {
   var d = document.createElement("div");
   d.setAttribute("class", "gauge32");
   d.style.height = "32px";
   d.innerHTML = "<canvas width='32' height='32'></canvas>";
 
-  analyzer.smoothingTimeConstant = 0.2;
+  analyzer.smoothingTimeConstant = 0;
+  analyzer.minDecibels = -40;
+  analyzer.maxDecibels = -10;
   var canvas = d.firstChild;
   var ctx = canvas.getContext('2d');
-  var freqdata = new Uint8Array(1024);
-  var smoothed_avg = 0;
-//  var update = function() {
-//    analyzer.getByteFrequencyData(freqdata);
-//    var sum2 = 0;
-//    for (var i = 0; i < freqdata.length; i++) {
-//      sum2 += freqdata[i];
-//    }
-//    var avg = sum2 / freqdata.length;
-//    smoothed_avg = avg * 0.5 + smoothed_avg * 0.5;
-//
-//    var fast_y = 32 - avg * 32.0 / 128;
-//    var smoothed_y = 32 - smoothed_avg * 32.0 / 128;
-//
-//    ctx.clearRect(0, 0, 32, 32);
-//    ctx.fillStyle = "#000";
-//    ctx.fillRect(0, 0, 32, smoothed_y);
-//    ctx.fillStyle = "#fff";
-//    ctx.fillRect(0, fast_y, 32, 1);
-//  }
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, 32, 32);
 
-  var sums = new Float32Array(32);
+  var NBINS = 8;
+  var freqdata = new Uint8Array(1024);
+  var SMOOTHING_TC = 0.90;
+  var last_sums = new Float32Array(NBINS);
+  var last_sums2 = new Float32Array(NBINS);
+  var sums = new Float32Array(NBINS);
+  var peak_avg = new Float32Array(NBINS);
+  var counts = new Array(NBINS);
   var update = function() {
     analyzer.getByteFrequencyData(freqdata);
-    for (var i = 0; i < 32; i++) {
+    for (var i = 0; i < NBINS; i++) {
       sums[i] = 0;
+      counts[i] = 0;
     }
-    for (var i = 0; i < freqdata.length; i++) {
-      sums[Math.floor(i * 32 / freqdata.length)] += freqdata[i];
+    for (var i = 1; i < freqdata.length; i++) {
+      var bin = Math.floor((Math.log(i) - Math.log(1)) /
+	  (Math.log(freqdata.length) - Math.log(1)) * NBINS);
+      sums[bin] += freqdata[i];
+      counts[bin]++;
+    }
+    for (var i = 0; i < NBINS; i++) {
+      var avg = (sums[i] + last_sums[i] + last_sums2[i]) / counts[i] / 256.0 / 2.0;
+      last_sums2[i] = last_sums[i];
+      last_sums[i] = sums[i];
+
+      if (avg > peak_avg[i]) {
+        peak_avg[i] = avg;
+      } else {
+        peak_avg[i] = peak_avg[i] * (SMOOTHING_TC) + avg * (1 - SMOOTHING_TC);
+      }
     }
 
     ctx.clearRect(0, 0, 32, 32);
     ctx.fillStyle = "#000";
-    for (var i = 0; i < 32; i++) {
-      var avg = sums[i] * 32 / freqdata.length;
-      var fast_y = 32 - avg * 32.0 / 128;
+    for (var i = 0; i < NBINS; i++) {
+      var avg = peak_avg[i];
+      var fast_y = 32 - avg * 32.0;
 
-      ctx.fillRect(i, 0, 1, fast_y);
+      ctx.fillRect(i * 32 / NBINS, 0, 32 / NBINS, fast_y);
     }
   }
 

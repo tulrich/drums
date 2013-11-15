@@ -1,10 +1,13 @@
 // timeline.js
 
 var MEASURE_WIDTH = 200;
-var MEASURE_HEIGHT = 200;
+var MEASURE_HEIGHT = 192;
+var MEASURE_Y0 = 4;
 var timeline_context;
 var timeline_overlay_context;
 var last_measure0 = -1;
+var last_loop_measure0 = -1;
+var last_loop_length = 0;
 var measure_position = 0;
 
 function init_timeline() {
@@ -29,8 +32,15 @@ function update_measure_position() {
 function update_timeline_view() {
   update_measure_position();
   var measure0 = Math.floor(measure_position);
-  if (measure0 != last_measure0) {
+  if (measure0 != last_measure0 ||
+      (play_state &&
+	  (play_state.loop_measure0 != last_loop_measure0 ||
+	   play_state.loop_length != last_loop_length))) {
     measure0 = last_measure0;
+    if (play_state) {
+      last_loop_measure0 = play_state.loop_measure0;
+      last_loop_length = play_state.loop_length;
+    }
     show_song();
   }
   show_overlay();
@@ -38,15 +48,31 @@ function update_timeline_view() {
 
 function show_song() {
   if (!song) return;
-  timeline_context.clearRect(0, 0, 800, 200);
+  var ctx = timeline_context;
+  ctx.clearRect(0, 0, 800, 200);
   var x0 = -MEASURE_WIDTH / 2;
   var measure0 = Math.floor(measure_position);
+  var loop_measure0 = -1;
+  var loop_length = 0;
+  if (play_state) {
+    loop_measure0 = play_state.loop_measure0;
+    loop_length = play_state.loop_length;
+  }
   for (var i = 0; i < 5; i++) {
     var mi = measure0 - 1 + i;
     if (mi >= 0 && mi < song.measure_reference.length) {
+      if (loop_measure0 > -1 &&
+          mi >= loop_measure0 && mi < loop_measure0 + loop_length) {
+        // Green background behind loop measure.
+        ctx.fillStyle = "#dfd";
+        ctx.fillRect(x0 + i * MEASURE_WIDTH, MEASURE_Y0,
+                         MEASURE_WIDTH, MEASURE_HEIGHT);
+      }
+
       var measure = song.measure[song.measure_reference[mi]];
-      show_measure(measure, timeline_context,
-		   x0 + i * MEASURE_WIDTH, 0, MEASURE_WIDTH, MEASURE_HEIGHT);
+      show_measure(measure, ctx,
+		   x0 + i * MEASURE_WIDTH, MEASURE_Y0,
+		   MEASURE_WIDTH, MEASURE_HEIGHT);
     }
   }
 }
@@ -128,27 +154,24 @@ function show_overlay() {
   var f = measure_position - measure0;
   var x0 = -MEASURE_WIDTH / 2 + 1 * MEASURE_WIDTH - 0.5;
 
-  // Blue measure box.
-//  ctx.beginPath();
-//  ctx.strokeStyle = "#00f";
-//  ctx.strokeRect(x0, 0.5, MEASURE_WIDTH, MEASURE_HEIGHT - 0.5);
-//  ctx.stroke();
-
+  // Time cursor.
   ctx.beginPath();
   ctx.strokeStyle = "#000";  // xxxx dashed";
   var x = x0 + f * MEASURE_WIDTH;
-  ctx.moveTo(x, 0);
-  ctx.lineTo(x, MEASURE_HEIGHT);
+  ctx.moveTo(x, MEASURE_Y0);
+  ctx.lineTo(x, MEASURE_Y0 + MEASURE_HEIGHT);
   ctx.stroke();
 
-  // Highlight relevant notes.
+  // Highlight selected notes.
   if (nav_y < NOTES_NAV_Y) {
+    // The little tick for the horizontal position.
     ctx.beginPath();
     ctx.strokeStyle = "#00f";
     ctx.moveTo((MEASURE_WIDTH / 8) * nav_x + x0, 1.5);
     ctx.lineTo((MEASURE_WIDTH / 8) * nav_x + x0 + 7, 1.5);
     ctx.stroke();
 
+    // The boxes around the selected notes.
     var freq = 1 << (NOTES_NAV_Y - 1 - nav_y);
     var phase = nav_x;
     var phase_wrapped = (phase & ((1 << nav_y) - 1));
@@ -158,7 +181,7 @@ function show_overlay() {
     ctx.strokeStyle = "#00f";
     for (var i = 0; i < freq; i++) {
       ctx.beginPath();
-      ctx.strokeRect(x, 0, 7, MEASURE_HEIGHT);
+      ctx.strokeRect(x, MEASURE_Y0, 7, MEASURE_HEIGHT);
       ctx.stroke();
       x += interval;
     }
@@ -168,6 +191,15 @@ function show_overlay() {
 function show_measure(measure, context, x, y, w, h) {
   update_measure_view(measure);
   context.drawImage(measure.viewdata.canvas, x, y, w, h);
+
+  // Top & bottom lines.
+  context.strokeStyle = "#ddd";
+  context.beginPath();
+  context.moveTo(x, y + 0.5);
+  context.lineTo(x + w, y + 0.5);
+  context.moveTo(x, y + h - 0.5);
+  context.lineTo(x + w, y + h - 0.5);
+  context.stroke();
 }
 
 var MEASURE_CANVAS_WIDTH = 12 * 8;

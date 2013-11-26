@@ -835,9 +835,10 @@ function make_meter_widget(analyzer) {
   d.innerHTML = "<canvas width='32' height='32'></canvas>";
 
   var FREQ_BINS = analyzer.frequencyBinCount;
+  var TIME_BINS = analyzer.fftSize;
   analyzer.smoothingTimeConstant = 0;
   analyzer.minDecibels = -50;
-  analyzer.maxDecibels = 0;
+  analyzer.maxDecibels = -10;
   var canvas = d.firstChild;
   var ctx = canvas.getContext('2d');
   ctx.fillStyle = "#000";
@@ -845,12 +846,14 @@ function make_meter_widget(analyzer) {
 
   var NBINS = 8;
   var freqdata = new Uint8Array(FREQ_BINS);
+  var timedata = new Uint8Array(TIME_BINS);
   var SMOOTHING_TC = 0.50;
   var last_sums = new Float32Array(NBINS);
   var last_sums2 = new Float32Array(NBINS);
   var sums = new Float32Array(NBINS);
   var peak_avg = new Float32Array(NBINS);
   var counts = new Array(NBINS);
+  var peak = 0;
 
   var update = function() {
     analyzer.getByteFrequencyData(freqdata);
@@ -876,14 +879,47 @@ function make_meter_widget(analyzer) {
       }
     }
 
+    analyzer.getByteTimeDomainData(timedata);
+    var new_peak = 0;
+    for (var i = 0; i < timedata.length; i++) {
+      var new_peak = Math.max(new_peak, Math.abs(timedata[i] - 128));
+    }
+    if (peak < new_peak) {
+      peak = new_peak;
+    } else {
+      var PEAK_TC = 0.25;
+      peak = peak * PEAK_TC + new_peak * (1 - PEAK_TC);
+    }
+
     ctx.clearRect(0, 0, 32, 32);
     ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, 32, 32);
+
+    // Peak bar.
+    var smoothed_peak_y = 32 - peak / 128 * 32.0;
+    var peak_y = 32 - new_peak / 128 * 32.0;
+    ctx.clearRect(0, peak_y, 32, smoothed_peak_y - peak_y + 2);
+//    ctx.beginPath();
+//    ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+//    ctx.moveTo(0, peak_y);
+//    ctx.lineTo(32, smoothed_peak_y);
+//    ctx.stroke();
+
+
+//    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+//    for (var i = 0; i < NBINS; i++) {
+//      var avg = peak_avg[i];
+//      var fast_y = 32 - avg * 32.0;
+//      ctx.fillRect(i * 32 / NBINS, 0, 32 / NBINS, fast_y);
+//    }
+    ctx.fillStyle = "rgba(255, 255, 255, 0.25)";
     for (var i = 0; i < NBINS; i++) {
       var avg = peak_avg[i];
       var fast_y = 32 - avg * 32.0;
-
-      ctx.fillRect(i * 32 / NBINS, 0, 32 / NBINS, fast_y);
+      ctx.clearRect(i * 32 / NBINS, fast_y, 32 / NBINS, 32 - fast_y);
+      ctx.fillRect(i * 32 / NBINS, fast_y, 32 / NBINS, 32 - fast_y);
     }
+
   }
 
   meter_update_functions.push(update);
@@ -910,7 +946,8 @@ window.onkeyup = keyup;
         width: 32px;
         background-size: 8px 32px;
         background-position: bottom;
-        background-image: linear-gradient(to top, blue, cyan, green, yellow, red);
+        //background-image: linear-gradient(to top, blue, cyan, green, yellow, red);
+        background-image: linear-gradient(to top, cyan, green, yellow, red);
       }
       .knoblabel {
         width: 32px;

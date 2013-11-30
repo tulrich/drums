@@ -36,7 +36,7 @@ var nav_x = 0;
 var nav_y = 0;
 var NOTES_NAV_Y = 4;
 var MAX_NAV_X = 10;
-var MAX_NAV_Y = 13 + NOTES_NAV_Y;
+var MAX_NAV_Y = 14 + NOTES_NAV_Y;
 
 function loadfn(buffer, url, error_info) {
   if (buffer) {
@@ -137,6 +137,7 @@ function init() {
   for (var i = 0; i < 9; i++) {
     var fx = {
       "trim": context.createGain(),
+      "dry_gain": context.createGain(),
       "eqhi": context.createBiquadFilter(),
       "eqmid": context.createBiquadFilter(),
       "eqlo": context.createBiquadFilter(),
@@ -144,19 +145,25 @@ function init() {
       "rev": context.createConvolver(),
       "fade": context.createGain(),
       "meter": context.createAnalyser(),
+      "wet_gain": context.createGain(),
+      "dry": { value: false },
       "solo": { value: false },
       "mute": { value: false },
     };
     fx.trim.connect(fx.eqhi);
+    fx.trim.connect(fx.dry_gain);
+    fx.dry_gain.connect(fx.fade);
     fx.eqhi.connect(fx.eqmid);
     fx.eqmid.connect(fx.eqlo);
     fx.eqlo.connect(fx.comp);
     fx.comp.connect(fx.rev);
-    fx.rev.connect(fx.fade);
+    fx.rev.connect(fx.wet_gain);
+    fx.wet_gain.connect(fx.fade);
     fx.fade.connect(fx.meter);
     fx.fade.connect(master_verb);
     fx.fade.connect(master_dry_gain);
 
+    fx.dry_gain.gain.value = 0.0;
     fx.eqhi.type = "highshelf";
     fx.eqhi.frequency.value = 12000;
     fx.eqhi.gain.value = 0;
@@ -172,6 +179,7 @@ function init() {
     fx.comp.knee.value = 0;
     fx.rev.normalize = false;  // The f'ing normalization formula for convolver is bugged? sigh
     fx.rev.buffer = flat;
+    fx.wet_gain.gain.value = 1.0;
 
     fx_channel.push(fx);
 
@@ -384,6 +392,7 @@ var fx_ids = [
   "c_rat",
   "c_att",
   "c_rel",
+  "dry",
   "fade",
   "solo",
   "mute",
@@ -568,6 +577,19 @@ function load_sample(url, continuation) {
   request.send();
 }
 
+function update_dry(id, channel) {
+  if (channel >= 0) {
+    var fx = fx_channel[channel];
+    if (fx.dry.value) {
+      fx.dry_gain.gain.value = 1.0;
+      fx.wet_gain.gain.value = 0.0;
+    } else {
+      fx.dry_gain.gain.value = 0.0;
+      fx.wet_gain.gain.value = 1.0;
+    }
+  }
+}
+
 function update_solo_mute(id, channel) {
   // solo > mute
   // If any solos are pressed, connect them and disconnect others.
@@ -603,6 +625,7 @@ function update_solo_mute(id, channel) {
       fx_channel[i].fade.disconnect(master_dry_gain);
     } else {
       // Connect.
+      fx_channel[i].fade.connect(fx_channel[i].meter);
       fx_channel[i].fade.connect(master_verb);
       fx_channel[i].fade.connect(master_dry_gain);
     }
@@ -699,21 +722,22 @@ function make_channel_fx_ui(i, label) {
   var outer = document.createElement("div");
   outer.style.width = "34px";
   outer.innerHTML = label + "<br/>";
-  outer.appendChild(make_knob_widget(i, 'dt', fx_time_trims[i], -0.050, 0.050, 0));
-  outer.appendChild(make_knob_widget(i, 'trim', fx_channel[i].trim.gain, 0, 2, 1));
-  outer.appendChild(make_knob_widget(i, 'eqhi', fx_channel[i].eqhi.gain, -20, 20, 0));
-  outer.appendChild(make_knob_widget(i, 'eqmd', fx_channel[i].eqmid.gain, -20, 20, 0));
-  outer.appendChild(make_knob_widget(i, 'eqsw', fx_channel[i].eqmid.frequency, 200, 8000, 2000, 64, true));
-  outer.appendChild(make_knob_widget(i, 'eqlo', fx_channel[i].eqlo.gain, -20, 20, 0));
+  outer.appendChild(make_knob_widget(i, "dt", fx_time_trims[i], -0.050, 0.050, 0));
+  outer.appendChild(make_knob_widget(i, "trim", fx_channel[i].trim.gain, 0, 2, 1));
+  outer.appendChild(make_knob_widget(i, "eqhi", fx_channel[i].eqhi.gain, -20, 20, 0));
+  outer.appendChild(make_knob_widget(i, "eqmd", fx_channel[i].eqmid.gain, -20, 20, 0));
+  outer.appendChild(make_knob_widget(i, "eqsw", fx_channel[i].eqmid.frequency, 200, 8000, 2000, 64, true));
+  outer.appendChild(make_knob_widget(i, "eqlo", fx_channel[i].eqlo.gain, -20, 20, 0));
 
-  outer.appendChild(make_knob_widget(i, 'c_thr', fx_channel[i].comp.threshold, -100, 0, 0));
-  outer.appendChild(make_knob_widget(i, 'c_rat', fx_channel[i].comp.ratio, 1, 20, 2, undefined, true));
-  outer.appendChild(make_knob_widget(i, 'c_att', fx_channel[i].comp.attack, 0, 1, 0.100));
-  outer.appendChild(make_knob_widget(i, 'c_rel', fx_channel[i].comp.release, 0, 1, 0.250));
+  outer.appendChild(make_knob_widget(i, "c_thr", fx_channel[i].comp.threshold, -100, 0, 0));
+  outer.appendChild(make_knob_widget(i, "c_rat", fx_channel[i].comp.ratio, 1, 20, 2, undefined, true));
+  outer.appendChild(make_knob_widget(i, "c_att", fx_channel[i].comp.attack, 0, 1, 0.100));
+  outer.appendChild(make_knob_widget(i, "c_rel", fx_channel[i].comp.release, 0, 1, 0.250));
 
-  //outer.appendChild(make_knob_widget(i, '_8', fx_channel[i].rev...));//xxxx TODO reverb
+  //outer.appendChild(make_knob_widget(i, "_8", fx_channel[i].rev...));//xxxx TODO reverb
 
-  outer.appendChild(make_knob_widget(i, 'fade', fx_channel[i].fade.gain, 0, 2, 1));
+  outer.appendChild(make_toggle_widget(i, "dry", fx_channel[i].dry, "#cfc", "#0c0", false, update_dry));
+  outer.appendChild(make_knob_widget(i, "fade", fx_channel[i].fade.gain, 0, 2, 1));
 
   outer.appendChild(make_toggle_widget(i, "solo", fx_channel[i].solo, "#ffc", "#ff0", false, update_solo_mute));
   outer.appendChild(make_toggle_widget(i, "mute", fx_channel[i].mute, "#fcc", "#f00", false, update_solo_mute));
@@ -730,9 +754,9 @@ function make_master_fx_ui() {
   outer.appendChild(make_knob_widget(10, "dry", master_dry_gain.gain, 0, 2, 1));
   outer.appendChild(make_knob_widget(10, "rev", master_verb_gain.gain, 0, 2, 0.30));
   outer.appendChild(make_knob_widget(10, "c_thr", master_comp.threshold, -100, 0, -10));
-  outer.appendChild(make_knob_widget(10, 'c_rat', master_comp.ratio, 1, 20, 4, undefined, true));
-  outer.appendChild(make_knob_widget(10, 'c_att', master_comp.attack, 0, 1, 0.003));
-  outer.appendChild(make_knob_widget(10, 'c_rel', master_comp.release, 0, 1, 0.050));
+  outer.appendChild(make_knob_widget(10, "c_rat", master_comp.ratio, 1, 20, 4, undefined, true));
+  outer.appendChild(make_knob_widget(10, "c_att", master_comp.attack, 0, 1, 0.003));
+  outer.appendChild(make_knob_widget(10, "c_rel", master_comp.release, 0, 1, 0.050));
 
   outer.appendChild(make_meter_widget(master_meter));
 
@@ -757,7 +781,7 @@ function make_knob_widget(i, label, variable, lo, hi, def, opt_increments, opt_l
   }
   var default_tick = Math.round((def - lo) / (hi - lo) * increments);
 
-  // hookup gauge 'fx0eqhi' to the variable.value
+  // hookup gauge "fx0eqhi" to the variable.value
   var adjust = function(increment) {
     var current_value = variable.value;
     if (logscale) {
@@ -774,9 +798,9 @@ function make_knob_widget(i, label, variable, lo, hi, def, opt_increments, opt_l
     var rotation = "rotate(" + Math.round((next_tick - increments / 2) * (288.0 / increments)) + "deg)";
     var elem = document.getElementById(id);
     if (elem) {
-      elem.style['-webkit-transform'] = rotation;
-      elem.style['-moz-transform'] = rotation;
-      elem.style['transform'] = rotation;
+      elem.style["-webkit-transform"] = rotation;
+      elem.style["-moz-transform"] = rotation;
+      elem.style["transform"] = rotation;
       // maybe adjust the color if the setting is off the default.
     }
 
@@ -840,7 +864,7 @@ function make_meter_widget(analyzer) {
   analyzer.minDecibels = -50;
   analyzer.maxDecibels = -10;
   var canvas = d.firstChild;
-  var ctx = canvas.getContext('2d');
+  var ctx = canvas.getContext("2d");
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, 32, 32);
 

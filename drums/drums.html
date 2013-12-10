@@ -352,13 +352,25 @@ function toggle_play() {
   if (play_state) {
     if (play_state.playing) {
       stop_song();
+      show_playing(false);
       return;
     } else if (play_state.song) {
       unpause();
+      show_playing(true);
       return;
     }
   }
   start_song(song);
+  show_playing(true);
+}
+
+function show_playing(playing) {
+  var button = document.getElementById("play_button");
+  if (playing) {
+    button.innerHTML = "&#9646;&nbsp;&#9646;";
+  } else {
+    button.innerHTML = "&#9654;";
+  }
 }
 
 function keyup(ev) {
@@ -828,6 +840,23 @@ function log2(x) {
   return Math.log(x) / Math.log(2);
 }
 
+function create_meter_gradient_image(doc) {
+  var dummy_canvas = doc.createElement("canvas");
+  dummy_canvas.width = 256;
+  dummy_canvas.height = 1;
+  var gc = dummy_canvas.getContext("2d");
+  var gradient = gc.createLinearGradient(0, 0, 256, 0);
+  gradient.addColorStop(0, "cyan");
+  gradient.addColorStop(0.33, "green");
+  gradient.addColorStop(0.67, "yellow");
+  gradient.addColorStop(1, "red");
+  gc.fillStyle = gradient;
+  gc.fillRect(0, 0, 256, 1);
+  return gc.getImageData(0, 0, 256, 1);
+}
+
+var meter_gradient_image = null;
+
 function make_meter_widget(analyzer) {
   var d = document.createElement("div");
   d.setAttribute("class", "gauge32");
@@ -855,6 +884,11 @@ function make_meter_widget(analyzer) {
   var counts = new Array(NBINS);
   var peak = 0;
 
+  // Make a gradient.
+  if (!meter_gradient_image) {
+    meter_gradient_image = create_meter_gradient_image(document);
+  }
+
   var update = function() {
     analyzer.getByteFrequencyData(freqdata);
     for (var i = 0; i < NBINS; i++) {
@@ -880,6 +914,9 @@ function make_meter_widget(analyzer) {
     }
 
     analyzer.getByteTimeDomainData(timedata);
+    // Detect the waveform peak value in this frame (new_peak), and
+    // also a smoothed version that tracks new peaks but decays over
+    // time (peak).
     var new_peak = 0;
     for (var i = 0; i < timedata.length; i++) {
       var new_peak = Math.max(new_peak, Math.abs(timedata[i] - 128));
@@ -887,31 +924,27 @@ function make_meter_widget(analyzer) {
     if (peak < new_peak) {
       peak = new_peak;
     } else {
-      var PEAK_TC = 0.25;
+      var PEAK_TC = 0.10;
       peak = peak * PEAK_TC + new_peak * (1 - PEAK_TC);
     }
 
-    ctx.clearRect(0, 0, 32, 32);
-    ctx.fillStyle = "#000";
+    // Clear the canvas with partial transparency, so it fades over
+    // time (i.e. for some motion blur).
+    ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
     ctx.fillRect(0, 0, 32, 32);
 
     // Peak bar.
     var smoothed_peak_y = 32 - peak / 128 * 32.0;
     var peak_y = 32 - new_peak / 128 * 32.0;
-    ctx.clearRect(0, peak_y, 32, smoothed_peak_y - peak_y + 2);
-//    ctx.beginPath();
-//    ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
-//    ctx.moveTo(0, peak_y);
-//    ctx.lineTo(32, smoothed_peak_y);
-//    ctx.stroke();
+    var i = Math.min(Math.round((31 - smoothed_peak_y) / 32 * 255), 255);
+    var r = meter_gradient_image.data[i * 4 + 0];
+    var g = meter_gradient_image.data[i * 4 + 1];
+    var b = meter_gradient_image.data[i * 4 + 2];
+    var a = 0.25 * i / 255.0 + 0.75;
+    ctx.fillStyle = "rgba(" + r + ", " + g + ", " + b + ", " + a + ")";
+    ctx.fillRect(0, smoothed_peak_y, 32, 32);
+    ctx.clearRect(0, peak_y, 32, 1);
 
-
-//    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-//    for (var i = 0; i < NBINS; i++) {
-//      var avg = peak_avg[i];
-//      var fast_y = 32 - avg * 32.0;
-//      ctx.fillRect(i * 32 / NBINS, 0, 32 / NBINS, fast_y);
-//    }
     ctx.fillStyle = "rgba(255, 255, 255, 0.25)";
     for (var i = 0; i < NBINS; i++) {
       var avg = peak_avg[i];
@@ -1013,7 +1046,7 @@ window.onkeyup = keyup;
 	</td><td width=10><!-- spacer --></td>
         <td id="fxmaster">
         </td>
-        <td><button name="play" onclick="toggle_play()">&#9654;</button></td>
+        <td><button id="play_button" onclick="toggle_play()">&#9654;</button></td>
       </tr>
     </table>
   </body>

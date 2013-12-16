@@ -33,10 +33,13 @@ var song = null;
 var play_state = null;
 
 var nav_x = 0;
-var nav_y = 0;
-var NOTES_NAV_Y = 4;
+var nav_y = 5;
+var NOTES_NAV_Y = 5;
+var NOTES_MAX_NAV_X = 16;
 var MAX_NAV_X = 10;
 var MAX_NAV_Y = 14 + NOTES_NAV_Y;
+
+var last_instrument = 0;
 
 function loadfn(buffer, url, error_info) {
   if (buffer) {
@@ -307,9 +310,7 @@ function init() {
                   ]);
 
   init_kit_fx_ui();
-  var info = song_from_location();
-  song = info.song;
-  set_fx_settings(info.fx);
+  update_from_location();
   init_timeline();
 }
 
@@ -323,6 +324,7 @@ function keydown(ev) {
       toggle_notes(instrument, nav_x, nav_y);
     }
     play(instrument, 255.0, 0.010);
+    last_instrument = instrument;
   } else if (ev.keyCode == 32) {  // space
     toggle_play();
   } else if (ev.keyCode == 38) {  // up
@@ -440,10 +442,16 @@ function nav_to_fx_id(x, y) {
 }
 
 function focus_nav() {
-  if (nav_x < 0) { nav_x = MAX_NAV_X - 1; }
-  if (nav_x >= MAX_NAV_X) { nav_x = 0; }
   if (nav_y < 0) { nav_y = MAX_NAV_Y - 1; }
   if (nav_y >= MAX_NAV_Y) { nav_y = 0; }
+
+  if (nav_y < NOTES_NAV_Y) {
+    if (nav_x < 0) { nav_x = NOTES_MAX_NAV_X - 1; }
+    if (nav_x >= NOTES_MAX_NAV_X) { nav_x = 0; }
+  } else {
+    if (nav_x < 0) { nav_x = MAX_NAV_X - 1; }
+    if (nav_x >= MAX_NAV_X) { nav_x = 0; }
+  }
   show_overlay();  // Update timeline nav.
   if (nav_y >= NOTES_NAV_Y) {
     // FX navigation
@@ -482,7 +490,7 @@ function nav_right() {
 function do_increment(ticks) {
   focus_nav();
   if (nav_y < NOTES_NAV_Y) {
-    adjust_notes(ticks, nav_x, nav_y);
+    adjust_notes(last_instrument, ticks, nav_x, nav_y);
   } else {
     // fx panel
     var id = nav_to_fx_id(nav_x, nav_y);
@@ -711,7 +719,7 @@ function create_default_fx() {
 }
 
 function get_fx_settings() {
-  var fx = [];
+  var fx = {};
   for (var i = 0; i < 256; i++) {
     var id = fx_index_to_id(i);
     if (id) {

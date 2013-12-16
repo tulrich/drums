@@ -11,16 +11,22 @@ function create_song() {
   return song;
 }
 
-function update_location(song) {
+function update_location() {
   // Push the encoding of the current song into the URL.
   var hash = encode_song_and_fx(song, get_fx_settings());
   window.location.hash = "s=" + hash;
 }
 
-function song_from_location() {
+function update_from_location() {
+  var info = song_and_fx_from_location();
+  song = info.song;
+  set_fx_settings(info.fx);
+}
+
+function song_and_fx_from_location() {
   var hash = window.location.hash;
-  if (hash.substr(0, 2) == "s=") {
-    var info = decode_song_and_fx(hash.substr(2));
+  if (hash.substr(0, 3) == "#s=") {
+    var info = decode_song_and_fx(hash.substr(3));
     if (info && info.song && info.fx) { return info; }
   }
   return {
@@ -148,12 +154,18 @@ function decode_song_and_fx(encoded) {
   if (encoded.length > 0) {
     version = encoded.charCodeAt(0) - 97;  // starts at 'a'
     if (version < 0 || version > 0) {
-      console.log("unknown encoded song version");
+      console.log("unknown encoded song version", version);
       return null;
     }
   }
 
-  var data = atob(LZString.decompressFromBase64(encoded.substr(1)).replace(/_/g, "="));
+  console.log(encoded);
+  var fixeq_encoded = encoded.substr(1).replace(/_/g, "=");
+  console.log(fixeq_encoded);
+  var decomp = LZString.decompressFromBase64(fixeq_encoded);
+  console.log(decomp);
+  data = decomp;
+  //var data = atob(LZString.decompressFromBase64(encoded.substr(1)).replace(/_/g, "="));
 
   var state = {
     "version": version,
@@ -177,15 +189,15 @@ function decode_fx_settings(state) {
   var fx_count = read_byte(state);
   if (state.error) { console.log(state); return null; }
 
-  var last_i = 0;
+  var last_idx = 0;
   for (var i = 0; i < fx_count; i++) {
-    var i = read_byte(state) + last_i;
+    var idx = read_byte(state) + last_idx;
     if (state.error) { console.log(state); return null; }
     var tick = read_byte(state);
     if (state.error) { console.log(state); return null; }
 
-    last_i = i;
-    fx[fx_index_to_id(i)] = tick;
+    last_idx = idx;
+    fx[fx_index_to_id(idx)] = tick;
   }
   return fx;
 }

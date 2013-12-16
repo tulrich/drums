@@ -77,7 +77,30 @@ function show_song() {
   }
 }
 
-function adjust_notes(ticks, nav_x, nav_y) {
+function adjust_notes(inst, ticks, nav_x, nav_y) {
+  var freq = 1 << (NOTES_NAV_Y - 1 - nav_y);
+  var phase = nav_x;
+  var phase_wrapped = (phase & ((1 << nav_y) - 1));
+
+  var x = phase_wrapped;
+  var interval = 16 / freq;
+
+  var measure0 = Math.floor(measure_position);
+  if (measure0 >= song.measure_reference.length) {
+    return;  // no-op
+  }
+
+  var mi = song.measure_reference[measure0];
+  var measure = song.measure[mi];
+
+  for (var i = 0; i < freq; i++) {
+    adjust_note(ticks, measure, inst, x * 1024);
+    x += interval;
+  }
+  if (measure.viewdata) {
+    measure.viewdata.dirty = true;
+  }
+  show_song();
 }
 
 function toggle_notes(inst, nav_x, nav_y) {
@@ -86,7 +109,7 @@ function toggle_notes(inst, nav_x, nav_y) {
   var phase_wrapped = (phase & ((1 << nav_y) - 1));
 
   var x = phase_wrapped;
-  var interval = 8 / freq;
+  var interval = 16 / freq;
 
   var measure0 = Math.floor(measure_position);
   if (measure0 >= song.measure_reference.length) {
@@ -98,7 +121,7 @@ function toggle_notes(inst, nav_x, nav_y) {
 
   var on_or_off = undefined;
   for (var i = 0; i < freq; i++) {
-    on_or_off = toggle_note(on_or_off, measure, inst, x * 2048);
+    on_or_off = toggle_note(on_or_off, measure, inst, x * 1024);
     x += interval;
   }
   if (measure.viewdata) {
@@ -112,7 +135,7 @@ function toggle_note(on_or_off, measure, inst, t) {
   var new_note = null;
   for (var i = 0; i < measure.note.length; i++) {
     var n = measure.note[i];
-    if (n.i == inst && n.t >= t - 1024 && n.t < t + 1024) {
+    if (n.i == inst && n.t >= t - 512 && n.t < t + 512) {
       // Match!
       if (!on_or_off) {
 	// Erase this note.
@@ -142,6 +165,21 @@ function toggle_note(on_or_off, measure, inst, t) {
   return on_or_off;
 }
 
+function adjust_note(ticks, measure, inst, t) {
+  // Adjust existing notes.
+  for (var i = 0; i < measure.note.length; i++) {
+    var n = measure.note[i];
+    if (n.i == inst && n.t >= t - 512 && n.t < t + 512) {
+      // Match!
+
+      // Modify this note.
+      n.v = Math.max(15, Math.min(n.v + 16 * ticks, 255));
+      return true;
+    }
+  }
+  return false;
+}
+
 function sort_notes_by_t(measure) {
   measure.note.sort(function(a, b) { if (a.t < b.t) return -1; else if (a.t > b.t) return 1; else return 0; });
 }
@@ -167,8 +205,8 @@ function show_overlay() {
     // The little tick for the horizontal position.
     ctx.beginPath();
     ctx.strokeStyle = "#00f";
-    ctx.moveTo((MEASURE_WIDTH / 8) * nav_x + x0, 1.5);
-    ctx.lineTo((MEASURE_WIDTH / 8) * nav_x + x0 + 7, 1.5);
+    ctx.moveTo((MEASURE_WIDTH / 16) * nav_x + x0, 1.5);
+    ctx.lineTo((MEASURE_WIDTH / 16) * nav_x + x0 + 7, 1.5);
     ctx.stroke();
 
     // The boxes around the selected notes.
@@ -176,7 +214,7 @@ function show_overlay() {
     var phase = nav_x;
     var phase_wrapped = (phase & ((1 << nav_y) - 1));
 
-    var x = (MEASURE_WIDTH / 8) * phase_wrapped + x0;
+    var x = (MEASURE_WIDTH / 16) * phase_wrapped + x0;
     var interval = MEASURE_WIDTH / freq;
     ctx.strokeStyle = "#00f";
     for (var i = 0; i < freq; i++) {

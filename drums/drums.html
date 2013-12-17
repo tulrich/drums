@@ -2,6 +2,7 @@
 <html>
   <head>
     <title>drums</title>
+    <meta name="viewport" content="width=400">
     <script src="play.js"></script>
     <script src="song.js"></script>
     <script src="timeline.js"></script>
@@ -325,6 +326,7 @@ function keydown(ev) {
     }
     play(instrument, 255.0, 0.010);
     last_instrument = instrument;
+    update_timeline_view();
   } else if (ev.keyCode == 32) {  // space
     toggle_play();
   } else if (ev.keyCode == 38) {  // up
@@ -336,9 +338,9 @@ function keydown(ev) {
   } else if (ev.keyCode == 39) {  // right
     nav_right();
   } else if (ev.keyCode == 189) {  // -
-    do_increment(-1);
+    do_increment(-1, ev.shiftKey ? 1 : 0);
   } else if (ev.keyCode == 187) {  // +
-    do_increment(1);
+    do_increment(1, ev.shiftKey ? 1 : 0);
   } else if (ev.keyCode == 219) {  // [
     loop_adjust(-1, ev.shiftKey ? -1 : 1);
   } else if (ev.keyCode == 221) {  // ]
@@ -487,10 +489,10 @@ function nav_right() {
   focus_nav();
 }
 
-function do_increment(ticks) {
+function do_increment(ticks, modifier) {
   focus_nav();
   if (nav_y < NOTES_NAV_Y) {
-    adjust_notes(last_instrument, ticks, nav_x, nav_y);
+    adjust_notes(last_instrument, ticks, modifier, nav_x, nav_y);
   } else {
     // fx panel
     var id = nav_to_fx_id(nav_x, nav_y);
@@ -498,7 +500,6 @@ function do_increment(ticks) {
       var adjust_fn = fx_adjust_function[id];
       if (adjust_fn) {
 	var result = adjust_fn(ticks);
-	console.log(result);//xxxx
       }
     }
   }
@@ -1059,9 +1060,9 @@ window.onkeyup = keyup;
   </head>
   <body>
 
-    <div id="timeline" style="height: 200px; width: 800px;">
-      <canvas id="timeline_canvas" width="800" height="200" style="position:absolute;"></canvas>
-      <canvas id="timeline_overlay_canvas" width="800" height="200" style="position:absolute;"></canvas>
+    <div id="timeline" style="height: 200px; width: 400px;">
+      <canvas id="timeline_canvas" width="400" height="200" style="position:absolute;"></canvas>
+      <canvas id="timeline_overlay_canvas" width="400" height="200" style="position:absolute;"></canvas>
     </div>
 
     <table id="kitparams" style="height: 400px;">

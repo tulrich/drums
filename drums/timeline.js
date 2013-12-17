@@ -77,7 +77,7 @@ function show_song() {
   }
 }
 
-function adjust_notes(inst, ticks, nav_x, nav_y) {
+function adjust_notes(inst, ticks, modifier, nav_x, nav_y) {
   var freq = 1 << (NOTES_NAV_Y - 1 - nav_y);
   var phase = nav_x;
   var phase_wrapped = (phase & ((1 << nav_y) - 1));
@@ -94,7 +94,7 @@ function adjust_notes(inst, ticks, nav_x, nav_y) {
   var measure = song.measure[mi];
 
   for (var i = 0; i < freq; i++) {
-    adjust_note(ticks, measure, inst, x * 1024);
+    adjust_note(ticks, modifier, measure, inst, x * 1024);
     x += interval;
   }
   if (measure.viewdata) {
@@ -165,15 +165,24 @@ function toggle_note(on_or_off, measure, inst, t) {
   return on_or_off;
 }
 
-function adjust_note(ticks, measure, inst, t) {
+function adjust_note(ticks, modifier, measure, inst, t) {
   // Adjust existing notes.
   for (var i = 0; i < measure.note.length; i++) {
     var n = measure.note[i];
+    console.log("n", n.i, n.t, inst, modifier);//xxxxx
     if (n.i == inst && n.t >= t - 512 && n.t < t + 512) {
       // Match!
 
       // Modify this note.
-      n.v = Math.max(15, Math.min(n.v + 16 * ticks, 255));
+      if (!modifier) {
+	// Change the velocity.
+	n.v = Math.max(15, Math.min(n.v + 16 * ticks, 255));
+      } else {
+	// Change the timing.
+	console.log("old time", n.t);//xxxxx
+	n.t = Math.max(0, Math.min(n.t + 16 * ticks, measure.beats * 4096 - 1));
+	console.log("new time", n.t);//xxxxxxxx
+      }
       return true;
     }
   }
@@ -224,6 +233,14 @@ function show_overlay() {
       x += interval;
     }
   }
+
+  // Highlight last instrument.
+  ctx.strokeStyle = "#00f";
+  ctx.beginPath();
+  var y = MEASURE_Y0 + last_instrument * MEASURE_HEIGHT / INSTRUMENT_ROWS;
+  var dy = MEASURE_HEIGHT / INSTRUMENT_ROWS;
+  ctx.strokeRect(x0 - 1.5, y, MEASURE_WIDTH + 1.5, dy);
+  ctx.stroke();
 }
 
 function show_measure(measure, context, x, y, w, h) {
@@ -240,9 +257,11 @@ function show_measure(measure, context, x, y, w, h) {
   context.stroke();
 }
 
-var MEASURE_CANVAS_WIDTH = 12 * 8;
-var MEASURE_CANVAS_HEIGHT = 3 * 13;
-var MEASURE_VERTICAL_STEP = 3;
+var INSTRUMENT_ROWS = 13;
+var MEASURE_CANVAS_WIDTH = 32 * 8;
+var MEASURE_CANVAS_HEIGHT = 10 * INSTRUMENT_ROWS;
+var MEASURE_VERTICAL_STEP = 10;
+var MEASURE_NOTE_WIDTH = 3.0;
 
 function update_measure_view(measure) {
   if (!measure.viewdata) {
@@ -261,7 +280,7 @@ function update_measure_view(measure) {
   }
 
   // Draw...
-  var beat_width = 12 * 8 / measure.beats;
+  var beat_width = MEASURE_CANVAS_WIDTH / measure.beats;
 
   // Beat lines.
   var ctx = measure.viewdata.ctx;
@@ -285,8 +304,8 @@ function update_measure_view(measure) {
     var y = MEASURE_VERTICAL_STEP * n.i;
     // TODO adjust width and color
     ctx.fillStyle = "#f0f";
-    var width = 2;
-    var height = 2;
+    var width = MEASURE_NOTE_WIDTH;
+    var height = (MEASURE_VERTICAL_STEP - 1) * n.v / 255.0;
     ctx.fillRect(x, y, width, height);
   }
 }

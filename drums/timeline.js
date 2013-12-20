@@ -169,7 +169,6 @@ function adjust_note(ticks, modifier, measure, inst, t) {
   // Adjust existing notes.
   for (var i = 0; i < measure.note.length; i++) {
     var n = measure.note[i];
-    console.log("n", n.i, n.t, inst, modifier);//xxxxx
     if (n.i == inst && n.t >= t - 512 && n.t < t + 512) {
       // Match!
 
@@ -179,9 +178,7 @@ function adjust_note(ticks, modifier, measure, inst, t) {
 	n.v = Math.max(15, Math.min(n.v + 16 * ticks, 255));
       } else {
 	// Change the timing.
-	console.log("old time", n.t);//xxxxx
 	n.t = Math.max(0, Math.min(n.t + 16 * ticks, measure.beats * 4096 - 1));
-	console.log("new time", n.t);//xxxxxxxx
       }
       return true;
     }

@@ -38,7 +38,7 @@ var nav_y = 5;
 var NOTES_NAV_Y = 5;
 var NOTES_MAX_NAV_X = 16;
 var MAX_NAV_X = 10;
-var MAX_NAV_Y = 14 + NOTES_NAV_Y;
+var MAX_NAV_Y = 15 + NOTES_NAV_Y;
 
 var last_instrument = 0;
 
@@ -145,8 +145,9 @@ function init() {
       "eqhi": context.createBiquadFilter(),
       "eqmid": context.createBiquadFilter(),
       "eqlo": context.createBiquadFilter(),
-      "comp": context.createDynamicsCompressor(),
       "rev": context.createConvolver(),
+      "comp": context.createDynamicsCompressor(),
+      "pan": context.createPanner(),
       "fade": context.createGain(),
       "meter": context.createAnalyser(),
       "wet_gain": context.createGain(),
@@ -159,13 +160,14 @@ function init() {
     fx.dry_gain.connect(fx.fade);
     fx.eqhi.connect(fx.eqmid);
     fx.eqmid.connect(fx.eqlo);
-    fx.eqlo.connect(fx.comp);
-    fx.comp.connect(fx.rev);
-    fx.rev.connect(fx.wet_gain);
-    fx.wet_gain.connect(fx.fade);
-    fx.fade.connect(fx.meter);
-    fx.fade.connect(master_verb);
-    fx.fade.connect(master_dry_gain);
+    fx.eqlo.connect(fx.rev);
+    fx.rev.connect(fx.comp);
+    fx.comp.connect(fx.wet_gain);
+    fx.wet_gain.connect(fx.pan);
+    fx.pan.connect(fx.fade);
+    fx.fade.connect(fx.meter);  // TODO l/r
+    fx.fade.connect(master_verb);  // TODO l/r
+    fx.fade.connect(master_dry_gain);  // TODO l/r
 
     fx.dry_gain.gain.value = 0.0;
     fx.eqhi.type = "highshelf";
@@ -183,6 +185,8 @@ function init() {
     fx.comp.knee.value = 0;
     fx.rev.normalize = false;  // The f'ing normalization formula for convolver is bugged? sigh
     fx.rev.buffer = flat;
+    fx.pan.panningModel = "equalpower";
+    fx.pan.setPosition(0, 0, -1);  // centered
     fx.wet_gain.gain.value = 1.0;
 
     fx_channel.push(fx);
@@ -409,6 +413,7 @@ var fx_ids = [
   "c_att",
   "c_rel",
   "dry",
+  "pan",
   "fade",
   "solo",
   "mute",
@@ -505,20 +510,35 @@ function do_increment(ticks, modifier) {
   }
 }
 
+// For overhead and room mic spatialization.
+var spatial_positions = [
+  [ 0, -0.5, -0.25 ],     // 0 - kick
+  [ -0.25, 0, 0 ],        // 1 - snare
+  [ -0.35, 0.20, -0.1 ],  // 2 - hat
+  [ 0.5, 0.20, -0.2 ],    // 3 - ride
+  [ -0.2, 0.30, -0.30 ],  // 4 - hi tom
+  [ 0.2, 0.30, -0.30 ],   // 5 - mid tom
+  [ 0.3, 0, 0 ],          // 6 - lo tom
+  [ -0.30, 0.8, -0.5 ],   // 7 - crash 1
+  [ 0.30, 0.8, -0.5 ],    // 8 - crash 2
+  [ -0.5, 1.0, -0.20 ],   // 9 - china crash
+];
+
+// each entry is a pair of [ fx_channel, spatial_position ]
 var fx_channel_assignments = [
-  [0, 7, 8],  // kick
-  [1, 7, 8],  // snare
-  [2, 7, 8],  // hat foot
-  [2, 7, 8],  // hat tight
-  [2, 7, 8],  // hat loose
-  [2, 7, 8],  // hat open
-  [3, 7, 8],  // ride
-  [4, 7, 8],  // htom
-  [5, 7, 8],  // mtom
-  [6, 7, 8],  // ltom
-  [7, 8],  // small crash
-  [7, 8],  // large crash
-  [7, 8],  // china crash
+  [0, 0 ],  // kick
+  [1, 1 ],  // snare
+  [2, 2 ],  // hat foot
+  [2, 2 ],  // hat tight
+  [2, 2 ],  // hat loose
+  [2, 2 ],  // hat open
+  [3, 3 ],  // ride
+  [4, 4 ],  // htom
+  [5, 5 ],  // mtom
+  [6, 6 ],  // ltom
+  [null, 7 ],  // small crash
+  [null, 8 ],  // large crash
+  [null, 9 ],  // china crash
 ];
 
 function play(instrument, volume, time) {
@@ -540,13 +560,15 @@ function rawplay(url, volume, time, channels) {
     src.buffer = sounds[url];
     var gain = context.createGain();
     gain.gain.value = volume / 255.0;
-    for (i in channels) {
-      var chan = channels[i];
-      if (solo_channel < 0 || chan == solo_channel) {
-	gain.connect(fx_channel[chan].trim);
-      }
+    var fx_chan = channels[0];
+    var do_play = solo_channel < 0 || fx_chan == solo_channel;
+    if (do_play) {
+      gain.connect(fx_channel[fx_chan].trim);
+      src.connect(gain);
+      var spatial_id = channels[1];
+      //... gain.connect(spatial_overhead[spatial_id]);
+      //... gain.connect(spatial_room[spatial_id]);
     }
-    src.connect(gain);
 
     if (time == undefined) {
       time = context.currentTime + 0.010;
@@ -739,26 +761,52 @@ function set_fx_settings(params) {
   }
 }
 
+function getset(variable) {
+  return function(x) {
+    if (x == undefined) {
+      return variable.value;
+    } else {
+      variable.value = x;
+    }
+  };
+}
+
+function panner_getset(panner) {
+  var locals = { "value": 0.5 };
+  return function(val) {
+    if (val == undefined) {
+      return locals.value;
+    } else {
+      locals.value = val;
+      var azimuth = Math.PI * (locals.value * 2.0 - 1.0) / 2.0;
+      var x = Math.sin(azimuth);
+      var z = -Math.cos(azimuth);
+      panner.setPosition(x, 0, z);
+    }
+  }
+}
+
 function make_channel_fx_ui(i, label) {
   var outer = document.createElement("div");
   outer.style.width = "34px";
   outer.innerHTML = label + "<br/>";
-  outer.appendChild(make_knob_widget(i, "dt", fx_time_trims[i], -0.050, 0.050, 0));
-  outer.appendChild(make_knob_widget(i, "trim", fx_channel[i].trim.gain, 0, 2, 1));
-  outer.appendChild(make_knob_widget(i, "eqhi", fx_channel[i].eqhi.gain, -20, 20, 0));
-  outer.appendChild(make_knob_widget(i, "eqmd", fx_channel[i].eqmid.gain, -20, 20, 0));
-  outer.appendChild(make_knob_widget(i, "eqsw", fx_channel[i].eqmid.frequency, 200, 8000, 2000, 64, true));
-  outer.appendChild(make_knob_widget(i, "eqlo", fx_channel[i].eqlo.gain, -20, 20, 0));
+  outer.appendChild(make_knob_widget(i, "dt", getset(fx_time_trims[i]), -0.050, 0.050, 0));
+  outer.appendChild(make_knob_widget(i, "trim", getset(fx_channel[i].trim.gain), 0, 2, 1));
+  outer.appendChild(make_knob_widget(i, "eqhi", getset(fx_channel[i].eqhi.gain), -20, 20, 0));
+  outer.appendChild(make_knob_widget(i, "eqmd", getset(fx_channel[i].eqmid.gain), -20, 20, 0));
+  outer.appendChild(make_knob_widget(i, "eqsw", getset(fx_channel[i].eqmid.frequency), 200, 8000, 2000, 64, true));
+  outer.appendChild(make_knob_widget(i, "eqlo", getset(fx_channel[i].eqlo.gain), -20, 20, 0));
 
-  outer.appendChild(make_knob_widget(i, "c_thr", fx_channel[i].comp.threshold, -100, 0, 0));
-  outer.appendChild(make_knob_widget(i, "c_rat", fx_channel[i].comp.ratio, 1, 20, 2, undefined, true));
-  outer.appendChild(make_knob_widget(i, "c_att", fx_channel[i].comp.attack, 0, 1, 0.100));
-  outer.appendChild(make_knob_widget(i, "c_rel", fx_channel[i].comp.release, 0, 1, 0.250));
+  outer.appendChild(make_knob_widget(i, "c_thr", getset(fx_channel[i].comp.threshold), -100, 0, 0));
+  outer.appendChild(make_knob_widget(i, "c_rat", getset(fx_channel[i].comp.ratio), 1, 20, 2, undefined, true));
+  outer.appendChild(make_knob_widget(i, "c_att", getset(fx_channel[i].comp.attack), 0, 1, 0.100));
+  outer.appendChild(make_knob_widget(i, "c_rel", getset(fx_channel[i].comp.release), 0, 1, 0.250));
 
   //outer.appendChild(make_knob_widget(i, "_8", fx_channel[i].rev...));//xxxx TODO reverb
 
   outer.appendChild(make_toggle_widget(i, "dry", fx_channel[i].dry, "#cfc", "#0c0", false, update_dry));
-  outer.appendChild(make_knob_widget(i, "fade", fx_channel[i].fade.gain, 0, 2, 1));
+  outer.appendChild(make_knob_widget(i, "pan", panner_getset(fx_channel[i].pan), 0, 1, 0.5));
+  outer.appendChild(make_knob_widget(i, "fade", getset(fx_channel[i].fade.gain), 0, 2, 1));
 
   outer.appendChild(make_toggle_widget(i, "solo", fx_channel[i].solo, "#ffc", "#ff0", false, update_solo_mute));
   outer.appendChild(make_toggle_widget(i, "mute", fx_channel[i].mute, "#fcc", "#f00", false, update_solo_mute));
@@ -772,19 +820,19 @@ function make_master_fx_ui() {
   var outer = document.createElement("div");
   outer.style.width = "34px";
   outer.innerHTML = "master<br/>";
-  outer.appendChild(make_knob_widget(10, "dry", master_dry_gain.gain, 0, 2, 1));
-  outer.appendChild(make_knob_widget(10, "rev", master_verb_gain.gain, 0, 2, 0.30));
-  outer.appendChild(make_knob_widget(10, "c_thr", master_comp.threshold, -100, 0, -10));
-  outer.appendChild(make_knob_widget(10, "c_rat", master_comp.ratio, 1, 20, 4, undefined, true));
-  outer.appendChild(make_knob_widget(10, "c_att", master_comp.attack, 0, 1, 0.003));
-  outer.appendChild(make_knob_widget(10, "c_rel", master_comp.release, 0, 1, 0.050));
+  outer.appendChild(make_knob_widget(10, "dry", getset(master_dry_gain.gain), 0, 2, 1));
+  outer.appendChild(make_knob_widget(10, "rev", getset(master_verb_gain.gain), 0, 2, 0.30));
+  outer.appendChild(make_knob_widget(10, "c_thr", getset(master_comp.threshold), -100, 0, -10));
+  outer.appendChild(make_knob_widget(10, "c_rat", getset(master_comp.ratio), 1, 20, 4, undefined, true));
+  outer.appendChild(make_knob_widget(10, "c_att", getset(master_comp.attack), 0, 1, 0.003));
+  outer.appendChild(make_knob_widget(10, "c_rel", getset(master_comp.release), 0, 1, 0.050));
 
   outer.appendChild(make_meter_widget(master_meter));
 
   return outer;
 }
 
-function make_knob_widget(i, label, variable, lo, hi, def, opt_increments, opt_logscale) {
+function make_knob_widget(i, label, variable_getset, lo, hi, def, opt_increments, opt_logscale) {
   var d = document.createElement("div");
   d.setAttribute("class", "control");
   var id = "fx" + i + label;
@@ -804,7 +852,7 @@ function make_knob_widget(i, label, variable, lo, hi, def, opt_increments, opt_l
 
   // hookup gauge "fx0eqhi" to the variable.value
   var adjust = function(increment) {
-    var current_value = variable.value;
+    var current_value = variable_getset(undefined);
     if (logscale) {
       current_value = Math.log(current_value);
     }
@@ -814,7 +862,7 @@ function make_knob_widget(i, label, variable, lo, hi, def, opt_increments, opt_l
     if (logscale) {
       next_value = Math.exp(next_value);
     }
-    variable.value = next_value;
+    variable_getset(next_value);
 
     var rotation = "rotate(" + Math.round((next_tick - increments / 2) * (288.0 / increments)) + "deg)";
     var elem = document.getElementById(id);

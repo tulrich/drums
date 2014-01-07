@@ -38,7 +38,7 @@ var nav_y = 5;
 var NOTES_NAV_Y = 5;
 var NOTES_MAX_NAV_X = 16;
 var MAX_NAV_X = 10;
-var MAX_NAV_Y = 15 + NOTES_NAV_Y;
+var MAX_NAV_Y = 17 + NOTES_NAV_Y;
 
 var last_instrument = 0;
 
@@ -62,6 +62,60 @@ function loadkit(instrument_list) {
   return kit;
 }
 
+var reverb_buffers = [];
+
+// http://www.echochamber.ch/images/responses/quantec/quantec_1.ZIP
+var reverb_urls = [
+  { "name": "backyard", "url": "samples/reverb/quantec_1/backyard.wav" },
+  { "name": "cathedral", "url": "samples/reverb/quantec_1/cathedral.wav" },
+  { "name": "chapel", "url": "samples/reverb/quantec_1/chapel.wav" },
+  { "name": "church", "url": "samples/reverb/quantec_1/church.wav" },
+  { "name": "concert_h-a", "url": "samples/reverb/quantec_1/concert_h-a.wav" },
+  { "name": "concert_h+a", "url": "samples/reverb/quantec_1/concert_h+a.wav" },
+  { "name": "muff_cine", "url": "samples/reverb/quantec_1/muff_cine.wav" },
+  { "name": "PlaDly1", "url": "samples/reverb/quantec_1/PlaDly1.wav" },
+  { "name": "PlaDly2", "url": "samples/reverb/quantec_1/PlaDly2.wav" },
+  { "name": "PlaDly3", "url": "samples/reverb/quantec_1/PlaDly3.wav" },
+  { "name": "PlaDly4", "url": "samples/reverb/quantec_1/PlaDly4.wav" },
+  { "name": "PlaDly5", "url": "samples/reverb/quantec_1/PlaDly5.wav" },
+  { "name": "RRstation", "url": "samples/reverb/quantec_1/RRstation.wav" },
+  { "name": "st_peter", "url": "samples/reverb/quantec_1/st_peter.wav" },
+  { "name": "theater", "url": "samples/reverb/quantec_1/theater.wav" },
+  { "name": "volksbad", "url": "samples/reverb/quantec_1/volksbad.wav" },
+];
+
+function load_reverb_fn(buffer, url, error_info) {
+  if (buffer) {
+    for (var i = 0; i < reverb_buffers.length; i++) {
+      if (url == reverb_buffers[i].url) {
+	reverb_buffers[i].value = buffer;
+	// TODO: Update fx channels that might be waiting for the buffer?
+      }
+    }
+  }
+}
+
+function load_reverbs() {
+  var flat = context.createBuffer(2, 1, 44100);
+  flat.getChannelData(0)[0] = 1;
+  flat.getChannelData(1)[0] = 1;
+
+  reverb_buffers.push(
+      { "name": "flat",
+	"value": flat,
+	"url": "" });
+
+  for (var i = 0; i < reverb_urls.length; i++) {
+    var new_verb = {
+      "name": reverb_urls[i].name,
+      "value": null,
+      "url": reverb_urls[i].url
+    };
+    reverb_buffers.push(new_verb);
+    load_sample(reverb_urls[i].url, load_reverb_fn);
+  }
+}
+
 function init() {
   buffer = context.createBuffer(2, 10000, 44100);
 
@@ -79,6 +133,8 @@ function init() {
   }
   sound_source.start(0);
 
+  load_reverbs();
+
   // Master fx etc.
   master_dry_gain = context.createGain();
   master_verb = context.createConvolver();
@@ -91,15 +147,6 @@ function init() {
   master_verb_gain.connect(master_comp);
   master_comp.connect(context.destination);
   master_comp.connect(master_meter);
-
-//   var delay1 = context.createDelay(0.020);
-//   var delay2 = context.createDelay(0.020);
-//   delay1.delayTime = 0.020;
-//   delay2.delayTime = 0.020;
-//   master_comp.connect(delay1);
-//   delay1.connect(delay2);
-//   delay1.connect(master_meter);
-//   delay2.connect(master_meter);
 
   // http://www.openairlib.net/auralizationdb/content/stairway-university-york
   // http://www.openairlib.net/auralizationdb/content/maes-howe
@@ -116,13 +163,13 @@ function init() {
 //      master_verb.buffer = buffer;
 //      });
 
-  // http://www.echochamber.ch/index.php/tipps-a-freebies/impulseresponses
-  // http://www.echochamber.ch/images/responses/quantec/quantec_1.ZIP
-  load_sample(
-      "samples/reverb/quantec_1/concert_h+a.wav",
-      function(buffer) {
-        master_verb.buffer = buffer;
-      });
+//  // http://www.echochamber.ch/index.php/tipps-a-freebies/impulseresponses
+//  // http://www.echochamber.ch/images/responses/quantec/quantec_1.ZIP
+//  load_sample(
+//      "samples/reverb/quantec_1/concert_h+a.wav",
+//      function(buffer) {
+//        master_verb.buffer = buffer;
+//      });
 
   master_verb_gain.gain.value = 0.30;
   master_dry_gain.gain.value = 2.0;
@@ -135,9 +182,6 @@ function init() {
   master_comp.threshold.value = -10;
 
   // fx channels
-  var flat = context.createBuffer(2, 1, 44100);
-  flat.getChannelData(0)[0] = 1;
-  flat.getChannelData(1)[0] = 1;
   for (var i = 0; i < 9; i++) {
     var fx = {
       "trim": context.createGain(),
@@ -146,6 +190,8 @@ function init() {
       "eqmid": context.createBiquadFilter(),
       "eqlo": context.createBiquadFilter(),
       "rev": context.createConvolver(),
+      "rev_wet": context.createGain(),
+      "rev_dry": context.createGain(),
       "comp": context.createDynamicsCompressor(),
       "pan": context.createPanner(),
       "fade": context.createGain(),
@@ -161,13 +207,16 @@ function init() {
     fx.eqhi.connect(fx.eqmid);
     fx.eqmid.connect(fx.eqlo);
     fx.eqlo.connect(fx.rev);
-    fx.rev.connect(fx.comp);
+    fx.rev.connect(fx.rev_wet);
+    fx.rev_wet.connect(fx.comp);
+    fx.eqlo.connect(fx.rev_dry);
+    fx.rev_dry.connect(fx.comp);
     fx.comp.connect(fx.wet_gain);
     fx.wet_gain.connect(fx.pan);
     fx.pan.connect(fx.fade);
-    fx.fade.connect(fx.meter);  // TODO l/r
-    fx.fade.connect(master_verb);  // TODO l/r
-    fx.fade.connect(master_dry_gain);  // TODO l/r
+    fx.fade.connect(fx.meter);
+    fx.fade.connect(master_verb);
+    fx.fade.connect(master_dry_gain);
 
     fx.dry_gain.gain.value = 0.0;
     fx.eqhi.type = "highshelf";
@@ -180,11 +229,13 @@ function init() {
     fx.eqlo.type = "lowshelf";
     fx.eqlo.frequency.value = 100;
     fx.eqlo.gain.value = 0;
+    fx.rev.normalize = false;  // The f'ing normalization formula for convolver is bugged? sigh
+    fx.rev.buffer = reverb_buffers[0].value;  // (flat)
+    fx.rev_wet.gain.value = 0;
+    fx.rev_dry.gain.value = 1;
     fx.comp.threshold.value = -10;
     fx.comp.ratio.value = 1;
     fx.comp.knee.value = 0;
-    fx.rev.normalize = false;  // The f'ing normalization formula for convolver is bugged? sigh
-    fx.rev.buffer = flat;
     fx.pan.panningModel = "equalpower";
     fx.pan.setPosition(0, 0, -1);  // centered
     fx.wet_gain.gain.value = 1.0;
@@ -194,19 +245,38 @@ function init() {
     fx_time_trims.push({ "value": 0 });
   }
 
-  kit1 = loadkit([
-      [["bender_stick.wav"]],
-      [["builttospill_kick.wav"]],
-      [["builttospill_ride.wav"]],
-      [["gobo_hat.wav"]],
-      [["gobo_hat2.wav"]],
-      [["gobo_snare.wav"]],
-      [["smokingpopes_kick.wav"]],
-      [["spoon_hi_tom.wav"]],
-      [["spoon_lo_tom.wav"]],
-      [["spoon_snare.wav"]],
-      [["stevenson_snare.wav"]],]
-          );
+  // Panners to feed the overheads and room channels.
+  var overhead_fx = fx_channel[7];
+  var room_fx = fx_channel[8];
+  for (var i = 0; i < spatial_positions.length; i++) {
+    var s = spatial_positions[i];
+    var oh = context.createPanner();
+    oh.panningModel = "HRTF";
+    oh.setPosition(s[0], s[1], s[2]);
+    oh.connect(overhead_fx.trim);
+    spatial_overhead.push(oh);
+
+    var rm = context.createPanner();
+    rm.panningModel = "HRTF";
+    rm.refDistance = 10.0;
+    rm.setPosition(s[0], s[1], s[2] + 10.0);
+    rm.connect(room_fx.trim);
+    spatial_room.push(rm);
+  }
+
+//  kit1 = loadkit([
+//      [["bender_stick.wav"]],
+//      [["builttospill_kick.wav"]],
+//      [["builttospill_ride.wav"]],
+//      [["gobo_hat.wav"]],
+//      [["gobo_hat2.wav"]],
+//      [["gobo_snare.wav"]],
+//      [["smokingpopes_kick.wav"]],
+//      [["spoon_hi_tom.wav"]],
+//      [["spoon_lo_tom.wav"]],
+//      [["spoon_snare.wav"]],
+//      [["stevenson_snare.wav"]],]
+//          );
 
 
   // 0: kick
@@ -408,6 +478,8 @@ var fx_ids = [
   "eqmd",
   "eqsw",
   "eqlo",
+  "rev_type",
+  "rev",
   "c_thr",
   "c_rat",
   "c_att",
@@ -421,6 +493,7 @@ var fx_ids = [
 
 var master_fx_ids = [
   "dry",
+  "rev_type",
   "rev",
   "c_thr",
   "c_rat",
@@ -524,6 +597,9 @@ var spatial_positions = [
   [ -0.5, 1.0, -0.20 ],   // 9 - china crash
 ];
 
+var spatial_overhead = [];
+var spatial_room = [];
+
 // each entry is a pair of [ fx_channel, spatial_position ]
 var fx_channel_assignments = [
   [0, 0 ],  // kick
@@ -549,7 +625,11 @@ function play(instrument, volume, time) {
     var url = inst[layer][index];
     var vol1 = Math.floor((index + 1) / nl * 255.0);
     var v = 255.0 * volume / vol1;
-    var time_trim = fx_time_trims[fx_channel_assignments[instrument][0]].value;
+    var fx_channel = fx_channel_assignments[instrument][0];
+    var time_trim = 0;
+    if (fx_channel != null) {
+      time_trim = fx_time_trims[fx_channel].value;
+    }
     rawplay(url, v, time + time_trim, fx_channel_assignments[instrument]);
   }
 }
@@ -564,10 +644,18 @@ function rawplay(url, volume, time, channels) {
     var do_play = solo_channel < 0 || fx_chan == solo_channel;
     if (do_play) {
       gain.connect(fx_channel[fx_chan].trim);
+    }
+    var spatial_id = channels[1];
+    var do_play_overhead = do_play || fx_chan == null || solo_channel == 7;
+    if (do_play_overhead) {
+      gain.connect(spatial_overhead[spatial_id]);
+    }
+    var do_play_room = do_play || fx_chan == null || solo_channel == 8;
+    if (do_play_room) {
+      gain.connect(spatial_room[spatial_id]);
+    }
+    if (do_play || do_play_overhead || do_play_room) {
       src.connect(gain);
-      var spatial_id = channels[1];
-      //... gain.connect(spatial_overhead[spatial_id]);
-      //... gain.connect(spatial_room[spatial_id]);
     }
 
     if (time == undefined) {
@@ -736,8 +824,15 @@ function create_default_fx() {
     "fx1c_att": 4,
     "fx1c_rel": 8,
     "fx2fade": 5,
+    "fx4pan": 10,
+    "fx5pan": 21,
+    "fx6pan": 28,
+    "fx7rev": 5,
+    "fx7rev_type": 7,
     "fx7fade": 4,
-    "fx8fade": 4,
+    "fx8rev": 32,
+    "fx8rev_type": 3,
+    "fx8fade": 10,
   };
 }
 
@@ -786,6 +881,29 @@ function panner_getset(panner) {
   }
 }
 
+function select_buffer_getset(variable, options) {
+  var locals = { "value": 0 };
+  return function(val) {
+    if (val == undefined) {
+      return locals.value;
+    } else {
+      locals.value = val;
+      variable.buffer = options[locals.value].value;
+    }
+  }
+}
+
+function crossfade_getset(var_a, var_b) {
+  return function(x) {
+    if (x == undefined) {
+      return var_b.value;
+    } else {
+      var_a.value = 1.0 - x;
+      var_b.value = x;
+    }
+  };
+}
+
 function make_channel_fx_ui(i, label) {
   var outer = document.createElement("div");
   outer.style.width = "34px";
@@ -796,6 +914,9 @@ function make_channel_fx_ui(i, label) {
   outer.appendChild(make_knob_widget(i, "eqmd", getset(fx_channel[i].eqmid.gain), -20, 20, 0));
   outer.appendChild(make_knob_widget(i, "eqsw", getset(fx_channel[i].eqmid.frequency), 200, 8000, 2000, 64, true));
   outer.appendChild(make_knob_widget(i, "eqlo", getset(fx_channel[i].eqlo.gain), -20, 20, 0));
+
+  outer.appendChild(make_select_widget(i, "rev_type", select_buffer_getset(fx_channel[i].rev, reverb_buffers), reverb_buffers, 0));
+  outer.appendChild(make_knob_widget(i, "rev", crossfade_getset(fx_channel[i].rev_dry.gain, fx_channel[i].rev_wet.gain), 0, 1, 0));//xxxxx
 
   outer.appendChild(make_knob_widget(i, "c_thr", getset(fx_channel[i].comp.threshold), -100, 0, 0));
   outer.appendChild(make_knob_widget(i, "c_rat", getset(fx_channel[i].comp.ratio), 1, 20, 2, undefined, true));
@@ -821,7 +942,8 @@ function make_master_fx_ui() {
   outer.style.width = "34px";
   outer.innerHTML = "master<br/>";
   outer.appendChild(make_knob_widget(10, "dry", getset(master_dry_gain.gain), 0, 2, 1));
-  outer.appendChild(make_knob_widget(10, "rev", getset(master_verb_gain.gain), 0, 2, 0.30));
+  outer.appendChild(make_select_widget(10, "rev_type", select_buffer_getset(master_verb, reverb_buffers), reverb_buffers, 0));
+  outer.appendChild(make_knob_widget(10, "rev", getset(master_verb_gain.gain), 0, 2, 0));
   outer.appendChild(make_knob_widget(10, "c_thr", getset(master_comp.threshold), -100, 0, -10));
   outer.appendChild(make_knob_widget(10, "c_rat", getset(master_comp.ratio), 1, 20, 4, undefined, true));
   outer.appendChild(make_knob_widget(10, "c_att", getset(master_comp.attack), 0, 1, 0.003));
@@ -913,6 +1035,36 @@ function make_toggle_widget(i, label, variable, color_off, color_on, def, update
   if (adjust(0).value != def) {
     adjust(1);
   }
+
+  return d;
+}
+
+function make_select_widget(i, label, variable_getset, options, def) {
+  var d = document.createElement("div");
+  d.setAttribute("class", "control");
+  d.style.height = "32px";
+  d.style.width = "32px";
+  var id = "fx" + i + label;
+  d.innerHTML = "<div><a href='javascript:void(0);' class='select32anchor'> </a>" +
+      "<div class='select32' id='" + id + "'></div></div>";
+  var elem = d.firstChild.firstChild;
+  elem.innerHTML = options[def].name;
+
+  var adjust = function(increment) {
+    var current_value = variable_getset(undefined);
+    var next_value = (current_value + increment + options.length) % options.length;
+    while (next_value < 0) {
+      next_value += options.length;
+    }
+    variable_getset(next_value);
+    elem.innerHTML = options[next_value].name;
+
+    var retval = { "tick": next_value, "value": next_value };
+    return retval;
+  }
+
+  fx_adjust_function[id] = adjust;
+  adjust(def);
 
   return d;
 }
@@ -1102,6 +1254,24 @@ window.onkeyup = keyup;
         height: 16px;
       }
       .toggle32anchor:focus {
+        border: 2px solid yellow;
+      }
+
+      .select32 {
+        position: absolute;
+        width: 32px;
+        height: 32px;
+      }
+      .select32anchor {
+        position: absolute;
+        width: 32px;
+        height: 32px;
+	overflow: hidden;
+	overflow-wrap: break-word;
+	font-size: 9px;
+	font-family: sans;
+      }
+      .select32anchor:focus {
         border: 2px solid yellow;
       }
     </style>

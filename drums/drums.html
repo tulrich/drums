@@ -30,6 +30,7 @@ var meter_pause_countup = 0;
 var sounds = {};
 var kit = null;
 var song = null;
+var tempo = 120;
 
 var play_state = null;
 
@@ -89,8 +90,16 @@ function load_reverb_fn(buffer, url, error_info) {
     for (var i = 0; i < reverb_buffers.length; i++) {
       if (url == reverb_buffers[i].url) {
 	reverb_buffers[i].value = buffer;
-	// TODO: Update fx channels that might be waiting for the buffer?
+	refresh_reverb_types();
       }
+    }
+  }
+}
+
+function refresh_reverb_types() {
+  for (var id in fx_adjust_function) {
+    if (id.substr(-8, 8) == "rev_type") {
+      fx_adjust_function[id](0);
     }
   }
 }
@@ -147,6 +156,15 @@ function init() {
   master_verb_gain.connect(master_comp);
   master_comp.connect(context.destination);
   master_comp.connect(master_meter);
+
+  // Experimental noise gate.... xxxx
+//  master_noise_gate = create_noise_gate(context);
+//  master_dry_gain.connect(master_noise_gate.sidechain_in);
+//  master_noise_gate.sidechain_out.connect(master_meter);
+//
+//  master_comp.connect(master_noise_gate.gain);
+//  master_noise_gate.gain.connect(context.destination);//xxx
+
 
   // http://www.openairlib.net/auralizationdb/content/stairway-university-york
   // http://www.openairlib.net/auralizationdb/content/maes-howe
@@ -252,6 +270,7 @@ function init() {
     var s = spatial_positions[i];
     var oh = context.createPanner();
     oh.panningModel = "HRTF";
+    oh.refDistance = 2.0;
     oh.setPosition(s[0], s[1], s[2]);
     oh.connect(overhead_fx.trim);
     spatial_overhead.push(oh);
@@ -389,6 +408,58 @@ function init() {
   init_timeline();
 }
 
+var squaring_curve = null;
+var linear_curve = null;
+var averaging_buffer = null;
+
+function init_curves(context) {
+  if (!squaring_curve) {
+    squaring_curve = new Float32Array(65536);
+    for (var i = 0; i < 65536; i++) {
+      var f = (i / 65536.0) * 2.0 - 1.0;
+      squaring_curve[i] = f * f;
+    }
+
+    linear_curve = new Float32Array(2);
+    linear_curve[0] = -1.0;
+    linear_curve[1] = 1.0;
+
+    var SIZE = 1000;
+    averaging_buffer = context.createBuffer(2, SIZE, 44100);
+    for (var channel = 0; channel < 2; channel++) {
+      var data = averaging_buffer.getChannelData(channel);
+      for (var i = 0; i < data.length; i++) {
+	data[i] = 1.0 / SIZE;
+      }
+    }
+  }
+}
+
+function create_noise_gate(context) {
+  var gate = {
+    "sidechain_in": context.createWaveShaper(),
+    "averager": context.createConvolver(),
+    "sidechain_out": context.createWaveShaper(),
+    "feedback": context.createGain(),
+    "gain": context.createGain()
+  };
+  init_curves(context);
+  gate.sidechain_in.curve = squaring_curve;
+  gate.averager.normalize = false;
+  gate.averager.buffer = averaging_buffer;
+  gate.sidechain_out.buffer = linear_curve;
+  gate.feedback.gain.value = 0.9;  // for exponential decay
+  gate.gain.gain.value = 0.0;
+
+  gate.sidechain_in.connect(gate.averager);
+  gate.averager.connect(gate.feedback);
+  gate.averager.connect(gate.sidechain_out);
+  gate.feedback.connect(gate.averager);  // hm, will this fail???
+  gate.sidechain_out.connect(gate.gain.gain);
+
+  return gate;
+}
+
 function keydown(ev) {
   if (ev.keyCode >= 48 && ev.keyCode <= 57) {  // '0' - '9'
     var instrument = ev.keyCode - 48;
@@ -492,6 +563,7 @@ var fx_ids = [
 ];
 
 var master_fx_ids = [
+  "tempo",
   "dry",
   "rev_type",
   "rev",
@@ -642,7 +714,7 @@ function rawplay(url, volume, time, channels) {
     gain.gain.value = volume / 255.0;
     var fx_chan = channels[0];
     var do_play = solo_channel < 0 || fx_chan == solo_channel;
-    if (do_play) {
+    if (do_play && fx_chan != null) {
       gain.connect(fx_channel[fx_chan].trim);
     }
     var spatial_id = channels[1];
@@ -664,6 +736,20 @@ function rawplay(url, volume, time, channels) {
     src.start(time);
 
     check_meters();
+  }
+}
+
+function get_tempo() {
+  if (song) {
+    return song.default_tempo;
+  } else {
+    return 120;
+  }
+}
+
+function set_tempo(x) {
+  if (song) {
+    change_tempo(play_state, song, x);
   }
 }
 
@@ -822,7 +908,9 @@ function create_default_fx() {
     "fx1c_thr": 24,
     "fx1c_rat": 11,
     "fx1c_att": 4,
-    "fx1c_rel": 8,
+    "fx1c_rel": 10,
+    "fx1rev": 2,
+    "fx1rev_type": 15,
     "fx2fade": 5,
     "fx4pan": 10,
     "fx5pan": 21,
@@ -904,6 +992,16 @@ function crossfade_getset(var_a, var_b) {
   };
 }
 
+function tempo_getset() {
+  return function(x) {
+    if (x == undefined) {
+      return get_tempo();
+    } else {
+      set_tempo(x);
+    }
+  };
+}
+
 function make_channel_fx_ui(i, label) {
   var outer = document.createElement("div");
   outer.style.width = "34px";
@@ -941,6 +1039,7 @@ function make_master_fx_ui() {
   var outer = document.createElement("div");
   outer.style.width = "34px";
   outer.innerHTML = "master<br/>";
+  outer.appendChild(make_int_widget(10, "tempo", tempo_getset(), 20, 320, 120));
   outer.appendChild(make_knob_widget(10, "dry", getset(master_dry_gain.gain), 0, 2, 1));
   outer.appendChild(make_select_widget(10, "rev_type", select_buffer_getset(master_verb, reverb_buffers), reverb_buffers, 0));
   outer.appendChild(make_knob_widget(10, "rev", getset(master_verb_gain.gain), 0, 2, 0));
@@ -972,7 +1071,6 @@ function make_knob_widget(i, label, variable_getset, lo, hi, def, opt_increments
   }
   var default_tick = Math.round((def - lo) / (hi - lo) * increments);
 
-  // hookup gauge "fx0eqhi" to the variable.value
   var adjust = function(increment) {
     var current_value = variable_getset(undefined);
     if (logscale) {
@@ -1053,11 +1151,42 @@ function make_select_widget(i, label, variable_getset, options, def) {
   var adjust = function(increment) {
     var current_value = variable_getset(undefined);
     var next_value = (current_value + increment + options.length) % options.length;
+    if (increment < -10) {
+      // Incrementing by a large negative value is used to reset to 0.
+      next_value = 0;
+    }
     while (next_value < 0) {
       next_value += options.length;
     }
     variable_getset(next_value);
     elem.innerHTML = options[next_value].name;
+
+    var retval = { "tick": next_value, "value": next_value };
+    return retval;
+  }
+
+  fx_adjust_function[id] = adjust;
+  adjust(def);
+
+  return d;
+}
+
+function make_int_widget(i, label, variable_getset, min, max, def) {
+  var d = document.createElement("div");
+  d.setAttribute("class", "control");
+  d.style.height = "32px";
+  d.style.width = "32px";
+  var id = "fx" + i + label;
+  d.innerHTML = "<div><a href='javascript:void(0);' class='select32anchor'> </a>" +
+      "<div class='select32' id='" + id + "'></div></div>";
+  var elem = d.firstChild.firstChild;
+  elem.innerHTML = String(def);
+
+  var adjust = function(increment) {
+    var current_value = variable_getset(undefined);
+    var next_value = Math.max(min, Math.min(current_value + increment, max));
+    variable_getset(next_value);
+    elem.innerHTML = String(next_value);
 
     var retval = { "tick": next_value, "value": next_value };
     return retval;

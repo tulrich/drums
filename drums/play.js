@@ -106,6 +106,27 @@ function song_time_at_measure_start(song, measure_i, state) {
   return t;
 }
 
+function change_tempo(state, song, new_tempo) {
+  if (state) {
+    var t0 = state.t;
+    var p0 = get_song_measure_position(song, state.t);
+    state.tempo = new_tempo;
+    var measure_i = Math.floor(p0);
+    var frac = p0 - measure_i;
+    var new_time = song_time_at_measure_start(song, measure_i, state);
+    var beats = song.measure[song.measure_reference[measure_i]].beats;
+    new_time += frac * beats * 44100 * 60.0 / state.tempo;
+
+    console.log(t0, p0, new_tempo, measure_i, frac, new_time, beats);//xxxxx
+    state.t = new_time;
+
+    // fix t0currentTime
+    var dt = state.t - t0;
+    state.t0currentTime -= dt / 44100;
+  }
+  song.default_tempo = new_tempo;
+}
+
 function check_queue_more() {
   if (!play_state || !play_state.playing) {
     return;

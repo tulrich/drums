@@ -39,7 +39,7 @@ var nav_y = 5;
 var NOTES_NAV_Y = 5;
 var NOTES_MAX_NAV_X = 16;
 var MAX_NAV_X = 10;
-var MAX_NAV_Y = 17 + NOTES_NAV_Y;
+var MAX_NAV_Y = 18 + NOTES_NAV_Y;
 
 var last_instrument = 0;
 
@@ -211,17 +211,18 @@ function init() {
       "rev_wet": context.createGain(),
       "rev_dry": context.createGain(),
       "comp": context.createDynamicsCompressor(),
+      "sat": context.createWaveShaper(),
+      "wet_gain": context.createGain(),
       "pan": context.createPanner(),
       "fade": context.createGain(),
       "meter": context.createAnalyser(),
-      "wet_gain": context.createGain(),
       "dry": { value: false },
       "solo": { value: false },
       "mute": { value: false },
     };
     fx.trim.connect(fx.eqhi);
     fx.trim.connect(fx.dry_gain);
-    fx.dry_gain.connect(fx.fade);
+    fx.dry_gain.connect(fx.pan);
     fx.eqhi.connect(fx.eqmid);
     fx.eqmid.connect(fx.eqlo);
     fx.eqlo.connect(fx.rev);
@@ -229,7 +230,8 @@ function init() {
     fx.rev_wet.connect(fx.comp);
     fx.eqlo.connect(fx.rev_dry);
     fx.rev_dry.connect(fx.comp);
-    fx.comp.connect(fx.wet_gain);
+    fx.comp.connect(fx.sat);
+    fx.sat.connect(fx.wet_gain);
     fx.wet_gain.connect(fx.pan);
     fx.pan.connect(fx.fade);
     fx.fade.connect(fx.meter);
@@ -447,7 +449,7 @@ function create_noise_gate(context) {
   gate.sidechain_in.curve = squaring_curve;
   gate.averager.normalize = false;
   gate.averager.buffer = averaging_buffer;
-  gate.sidechain_out.buffer = linear_curve;
+  gate.sidechain_out.curve = linear_curve;
   gate.feedback.gain.value = 0.9;  // for exponential decay
   gate.gain.gain.value = 0.0;
 
@@ -555,6 +557,7 @@ var fx_ids = [
   "c_rat",
   "c_att",
   "c_rel",
+  "sat",
   "dry",
   "pan",
   "fade",
@@ -902,6 +905,7 @@ function create_default_fx() {
     "fx0c_rat": 15,
     "fx0c_att": 4,
     "fx0c_rel": 8,
+    "fx0sat": 4,
     "fx1eqmd": 12,
     "fx1eqsw": 22,
     "fx1eqlo": 18,
@@ -911,16 +915,22 @@ function create_default_fx() {
     "fx1c_rel": 10,
     "fx1rev": 2,
     "fx1rev_type": 15,
+    "fx1sat": 4,
     "fx2fade": 5,
     "fx4pan": 10,
+    "fx4sat": 4,
     "fx5pan": 21,
+    "fx5sat": 4,
     "fx6pan": 28,
+    "fx6sat": 4,
     "fx7rev": 5,
     "fx7rev_type": 7,
     "fx7fade": 4,
+    "fx7sat": 4,
     "fx8rev": 32,
     "fx8rev_type": 3,
-    "fx8fade": 10,
+    "fx8sat": 4,
+    "fx8fade": 6,
   };
 }
 
@@ -992,6 +1002,75 @@ function crossfade_getset(var_a, var_b) {
   };
 }
 
+var SAT_CURVE_COUNT = 32;
+var sat_curve = [];
+
+// An asymmetrical piece-wise linear wave-shaper curve.  Something
+// like this:
+//
+//  |                     ---
+//  |                  ---
+//  |               ---
+//  |              /
+//  |             /
+//  |            *
+//  |           /
+//  |          /
+//  |         /
+//  |     ----
+//  | ----
+//  +------------------------
+function lin_distort(thresh, f2) {
+  var m = 1 + (1 - thresh) * 3;
+  var yp = 0.3;
+  var yn = -0.8;
+
+  if (f2 >= 0) {
+    var xp = yp / m;
+    if (f2 < xp) { return f2 * m; }
+    var m2 = (1 - yp) / (1 - xp);
+    return yp + m2 * (f2 - xp);
+  } else {
+    var xn = yn / m;
+    if (f2 > xn) { return f2 * m; }
+    var m2 = (yn + 1) / (xn + 1);
+    return yn + m2 * (f2 - xn);
+  }
+}
+
+function init_saturation_curves() {
+  if (sat_curve.length) {
+    return;
+  }
+  for (var s = 0; s < SAT_CURVE_COUNT; s++) {
+    var buf = new Float32Array(256);
+    var power = 100.0 / (100.0 + s);
+    var thresh = 1.0 - s / (SAT_CURVE_COUNT * 2);
+    for (var i = 0; i < 256; i++) {
+      var f = (i / 255.0) * 2.0 - 1.0;
+      var f2 = f;
+      f2 = lin_distort(thresh, f2);
+      buf[i] = f2;
+    }
+    sat_curve.push(buf);
+  }
+}
+
+function saturation_getset(wave_shaper) {
+  init_saturation_curves();
+  var locals = { "value": 0 };
+  return function(x) {
+    if (x == undefined) {
+      return locals.value;
+    } else {
+      locals.value = x;
+      var i = Math.round(x * (SAT_CURVE_COUNT - 1));
+      i = Math.max(0, Math.min(i, SAT_CURVE_COUNT - 1));
+      wave_shaper.curve = sat_curve[i];
+    }
+  };
+}
+
 function tempo_getset() {
   return function(x) {
     if (x == undefined) {
@@ -1021,7 +1100,7 @@ function make_channel_fx_ui(i, label) {
   outer.appendChild(make_knob_widget(i, "c_att", getset(fx_channel[i].comp.attack), 0, 1, 0.100));
   outer.appendChild(make_knob_widget(i, "c_rel", getset(fx_channel[i].comp.release), 0, 1, 0.250));
 
-  //outer.appendChild(make_knob_widget(i, "_8", fx_channel[i].rev...));//xxxx TODO reverb
+  outer.appendChild(make_knob_widget(i, "sat", saturation_getset(fx_channel[i].sat), 0, 1, 0));
 
   outer.appendChild(make_toggle_widget(i, "dry", fx_channel[i].dry, "#cfc", "#0c0", false, update_dry));
   outer.appendChild(make_knob_widget(i, "pan", panner_getset(fx_channel[i].pan), 0, 1, 0.5));

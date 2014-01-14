@@ -1,8 +1,9 @@
 // timeline.js
 
-var MEASURE_WIDTH = 200;
-var MEASURE_HEIGHT = 192;
-var MEASURE_Y0 = 4;
+var MEASURE_WIDTH = 300;
+var MEASURE_HEIGHT = 142;
+var FOCUS_X0 = -250;
+var FOCUS_Y0 = 56;
 var timeline_context;
 var timeline_overlay_context;
 var last_measure0 = -1;
@@ -46,11 +47,14 @@ function update_timeline_view() {
   show_overlay();
 }
 
+var STRIP_MEASURE_HEIGHT = 50;
+var STRIP_MEASURE_WIDTH = 50;
+
 function show_song() {
   if (!song) return;
   var ctx = timeline_context;
-  ctx.clearRect(0, 0, 800, 200);
-  var x0 = -MEASURE_WIDTH / 2;
+  ctx.fillStyle = "#ccc";
+  ctx.fillRect(0, 0, 400, 200);
   var measure0 = Math.floor(measure_position);
   var loop_measure0 = -1;
   var loop_length = 0;
@@ -58,21 +62,51 @@ function show_song() {
     loop_measure0 = play_state.loop_measure0;
     loop_length = play_state.loop_length;
   }
-  for (var i = 0; i < 5; i++) {
+
+  // Strip view.
+  show_measure_strip(ctx, -STRIP_MEASURE_WIDTH/2, 2,
+		     STRIP_MEASURE_WIDTH, STRIP_MEASURE_HEIGHT,
+		     measure0, loop_measure0, loop_length);
+
+  // Focused view.
+  show_measure_strip(ctx, FOCUS_X0, FOCUS_Y0, MEASURE_WIDTH, MEASURE_HEIGHT,
+		     measure0, loop_measure0, loop_length);
+}
+
+// Start or end bar.
+function show_bar(ctx, x, y, height) {
+  ctx.strokeStyle = "#000";
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x, y + height);
+  ctx.moveTo(x + 1, y);
+  ctx.lineTo(x + 1, y + height);
+  ctx.stroke();
+}
+
+function show_measure_strip(ctx, x0, y0, mwidth, mheight,
+			    measure0, loop_measure0, loop_length) {
+  for (var i = 0; i < 100; i++) {
     var mi = measure0 - 1 + i;
-    if (mi >= 0 && mi < song.measure_reference.length) {
+    if (mi >= song.measure_reference.length) {
+      // Show end bar.
+      show_bar(ctx, x0 + i * mwidth, y0, mheight);
+      break;
+    } else if (mi == 0) {
+      show_bar(ctx, x0 + i * mwidth - 2, y0, mheight);
+    }
+    if (mi >= 0) {
       if (loop_measure0 > -1 &&
           mi >= loop_measure0 && mi < loop_measure0 + loop_length) {
         // Green background behind loop measure.
         ctx.fillStyle = "#dfd";
-        ctx.fillRect(x0 + i * MEASURE_WIDTH, MEASURE_Y0,
-                         MEASURE_WIDTH, MEASURE_HEIGHT);
+      } else {
+	ctx.fillStyle = "#fff";
       }
+      ctx.fillRect(x0 + i * mwidth, y0, mwidth, mheight);
 
       var measure = song.measure[song.measure_reference[mi]];
-      show_measure(measure, ctx,
-		   x0 + i * MEASURE_WIDTH, MEASURE_Y0,
-		   MEASURE_WIDTH, MEASURE_HEIGHT);
+      show_measure(measure, ctx, x0 + i * mwidth, y0, mwidth, mheight);
     }
   }
 }
@@ -196,14 +230,14 @@ function show_overlay() {
   ctx.clearRect(0, 0, 800, 200);
   var measure0 = Math.floor(measure_position);
   var f = measure_position - measure0;
-  var x0 = -MEASURE_WIDTH / 2 + 1 * MEASURE_WIDTH - 0.5;
+  var x0 = FOCUS_X0 + 1 * MEASURE_WIDTH - 0.5;
 
   // Time cursor.
   ctx.beginPath();
   ctx.strokeStyle = "#000";  // xxxx dashed";
   var x = x0 + f * MEASURE_WIDTH;
-  ctx.moveTo(x, MEASURE_Y0);
-  ctx.lineTo(x, MEASURE_Y0 + MEASURE_HEIGHT);
+  ctx.moveTo(x, FOCUS_Y0);
+  ctx.lineTo(x, FOCUS_Y0 + MEASURE_HEIGHT);
   ctx.stroke();
 
   // Highlight selected notes.
@@ -211,8 +245,8 @@ function show_overlay() {
     // The little tick for the horizontal position.
     ctx.beginPath();
     ctx.strokeStyle = "#00f";
-    ctx.moveTo((MEASURE_WIDTH / 16) * nav_x + x0, 1.5);
-    ctx.lineTo((MEASURE_WIDTH / 16) * nav_x + x0 + 7, 1.5);
+    ctx.moveTo((MEASURE_WIDTH / 16) * nav_x + x0, FOCUS_Y0 - 2.5);
+    ctx.lineTo((MEASURE_WIDTH / 16) * nav_x + x0 + 7, FOCUS_Y0 - 2.5);
     ctx.stroke();
 
     // The boxes around the selected notes.
@@ -225,7 +259,7 @@ function show_overlay() {
     ctx.strokeStyle = "#00f";
     for (var i = 0; i < freq; i++) {
       ctx.beginPath();
-      ctx.strokeRect(x, MEASURE_Y0, 7, MEASURE_HEIGHT);
+      ctx.strokeRect(x, FOCUS_Y0, 7, MEASURE_HEIGHT);
       ctx.stroke();
       x += interval;
     }
@@ -234,24 +268,44 @@ function show_overlay() {
   // Highlight last instrument.
   ctx.strokeStyle = "#00f";
   ctx.beginPath();
-  var y = MEASURE_Y0 + last_instrument * MEASURE_HEIGHT / INSTRUMENT_ROWS;
+  var y = FOCUS_Y0 + last_instrument * MEASURE_HEIGHT / INSTRUMENT_ROWS;
   var dy = MEASURE_HEIGHT / INSTRUMENT_ROWS;
   ctx.strokeRect(x0 - 1.5, y, MEASURE_WIDTH + 1.5, dy);
   ctx.stroke();
 }
 
-function show_measure(measure, context, x, y, w, h) {
+function show_measure(measure, ctx, x, y, w, h) {
   update_measure_view(measure);
-  context.drawImage(measure.viewdata.canvas, x, y, w, h);
+  if (Math.abs(w - STRIP_MEASURE_WIDTH) < 10) {
+    ctx.drawImage(measure.viewdata.canvas_small, x, y, w, h);
+  } else {
+    ctx.drawImage(measure.viewdata.canvas_large, x, y, w, h);
+  }
+
+  // Beat lines.
+  var beat_width = w / measure.beats;
+  ctx.strokeStyle = "#999";
+  for (var i = 0; i < measure.beats; i++) {
+    var lx = x + beat_width * i + 0.5;
+    if (lx < x + w) {
+      ctx.beginPath();
+      ctx.moveTo(lx, y + 0.5);
+      ctx.lineTo(lx, y + h - 0.5);
+      ctx.stroke();
+    }
+    if (i == 0) {
+      ctx.strokeStyle = "#ddd";
+    }
+  }
 
   // Top & bottom lines.
-  context.strokeStyle = "#ddd";
-  context.beginPath();
-  context.moveTo(x, y + 0.5);
-  context.lineTo(x + w, y + 0.5);
-  context.moveTo(x, y + h - 0.5);
-  context.lineTo(x + w, y + h - 0.5);
-  context.stroke();
+  ctx.strokeStyle = "#ddd";
+  ctx.beginPath();
+  ctx.moveTo(x, y + 0.5);
+  ctx.lineTo(x + w, y + 0.5);
+  ctx.moveTo(x, y + h - 0.5);
+  ctx.lineTo(x + w, y + h - 0.5);
+  ctx.stroke();
 }
 
 var INSTRUMENT_ROWS = 13;
@@ -263,46 +317,48 @@ var MEASURE_NOTE_WIDTH = 3.0;
 function update_measure_view(measure) {
   if (!measure.viewdata) {
     measure.viewdata = {
-      "canvas": document.createElement("canvas"),
+      "canvas_small": document.createElement("canvas"),
+      "canvas_large": document.createElement("canvas"),
       "dirty": true,
     };
-    measure.viewdata.canvas.imageSmoothingEnabled = false;
-    measure.viewdata.canvas.width = MEASURE_CANVAS_WIDTH;
-    measure.viewdata.canvas.height = MEASURE_CANVAS_HEIGHT;
-    measure.viewdata.ctx = measure.viewdata.canvas.getContext("2d");
+    //measure.viewdata.canvas_small.imageSmoothingEnabled = false;
+    measure.viewdata.canvas_small.width = STRIP_MEASURE_WIDTH;
+    measure.viewdata.canvas_small.height = STRIP_MEASURE_HEIGHT;
+    measure.viewdata.ctx_small = measure.viewdata.canvas_small.getContext("2d");
+
+    //measure.viewdata.canvas_large.imageSmoothingEnabled = false;
+    measure.viewdata.canvas_large.width = MEASURE_WIDTH;
+    measure.viewdata.canvas_large.height = MEASURE_HEIGHT;
+    measure.viewdata.ctx_large = measure.viewdata.canvas_large.getContext("2d");
   }
 
   if (!measure.viewdata.dirty) {
     return;
   }
 
-  // Draw...
-  var beat_width = MEASURE_CANVAS_WIDTH / measure.beats;
+  var func = function(ctx, width, height) {
+    ctx.clearRect(0, 0, width, height);
 
-  // Beat lines.
-  var ctx = measure.viewdata.ctx;
-  ctx.clearRect(0, 0, MEASURE_CANVAS_WIDTH, MEASURE_CANVAS_HEIGHT);
-  ctx.strokeStyle = "#999";
-  for (var i = 0; i < measure.beats; i++) {
-    ctx.beginPath();
-    ctx.moveTo(beat_width * i + 0.5, 0.5);
-    ctx.lineTo(beat_width * i + 0.5, MEASURE_CANVAS_HEIGHT + 0.5);
-    ctx.stroke();
-    if (i == 0) {
-      ctx.strokeStyle = "#ddd";
+    var vertical_step = height / 13;
+    var note_width = width / 60;
+    if (width < 100) {
+      // Fatter notes when displayed smaller.
+      note_width = width / 35;
     }
-  }
 
-  // Notes.
-  var measure_ticks = 4096 * measure.beats;
-  for (var i = 0; i < measure.note.length; i++) {
-    var n = measure.note[i];
-    var x = MEASURE_CANVAS_WIDTH * n.t / measure_ticks;
-    var y = MEASURE_VERTICAL_STEP * n.i;
-    // TODO adjust width and color
-    ctx.fillStyle = "#f0f";
-    var width = MEASURE_NOTE_WIDTH;
-    var height = (MEASURE_VERTICAL_STEP - 1) * n.v / 255.0;
-    ctx.fillRect(x, y, width, height);
-  }
+    // Notes.
+    var measure_ticks = 4096 * measure.beats;
+    for (var i = 0; i < measure.note.length; i++) {
+      var n = measure.note[i];
+      var x = width * n.t / measure_ticks;
+      var y = vertical_step * n.i;
+      // TODO adjust width and color
+      ctx.fillStyle = "#f0f";
+      var note_height = (vertical_step - 1) * n.v / 255.0;
+      ctx.fillRect(x, y, note_width, note_height);
+    }
+  };
+  // Draw...
+  func(measure.viewdata.ctx_small, STRIP_MEASURE_WIDTH, STRIP_MEASURE_HEIGHT);
+  func(measure.viewdata.ctx_large, MEASURE_WIDTH, MEASURE_HEIGHT);
 }

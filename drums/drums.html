@@ -128,20 +128,6 @@ function load_reverbs() {
 function init() {
   buffer = context.createBuffer(2, 10000, 44100);
 
-  // Test tone.
-  sound_source = context.createBufferSource();
-  sound_source.buffer = buffer;
-  sound_source.connect(context.destination);
-  var data = buffer.getChannelData(0);
-  for (var i = 0; i < data.length; i++) {
-    data[i] = Math.sin(i / data.length * 1000);
-  }
-  var data = buffer.getChannelData(1);
-  for (var i = 0; i < data.length; i++) {
-    data[i] = Math.sin(i / data.length * 1000 + 0.1);
-  }
-  sound_source.start(0);
-
   load_reverbs();
 
   // Master fx etc.
@@ -298,7 +284,6 @@ function init() {
 //      [["spoon_snare.wav"]],
 //      [["stevenson_snare.wav"]],]
 //          );
-
 
   // 0: kick
   // 1: snare
@@ -521,6 +506,17 @@ function toggle_play() {
   }
   start_song(song);
   show_playing(true);
+}
+
+function prerender() {
+  if (!song) { return; }
+
+//  // TODO
+//  var seconds = song_time_at_measure_start(song.measure_reference.length);
+//  var offline = new OfflineAudioContext(2, seconds * 44100, 44100);
+//  offline.oncomplete = function(completion) {
+//    var buffer = completion.renderedBuffer;
+//  };
 }
 
 function show_playing(playing) {
@@ -1507,7 +1503,9 @@ window.onkeyup = keyup;
 	</td><td width=10><!-- spacer --></td>
         <td id="fxmaster">
         </td>
-        <td><button id="play_button" onclick="toggle_play()">&#9654;</button></td>
+        <td><button id="play_button" onclick="toggle_play()">&#9654;</button><br/>
+	    <button id="prerender_button" onclick="prerender()">mp3</button>
+	    </td>
       </tr>
     </table>
   </body>

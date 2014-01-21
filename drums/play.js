@@ -106,6 +106,20 @@ function song_time_at_measure_start(song, measure_i, state) {
   return t;
 }
 
+function nav_to_measure(song, measure_i) {
+  if (!song) { return; }
+  if (!play_state) {
+    play_state = create_play_state(song);
+    stop_song();
+  }
+  measure_i = Math.max(0, measure_i);
+  measure_i = Math.min(measure_i, song.measure_reference.length - 1);
+  var m = get_song_measure_position(song, play_state.t);
+  if (measure_i != Math.floor(m)) {
+    reset_state_to_measure(song, measure_i, play_state);
+  }
+}
+
 function change_tempo(state, song, new_tempo) {
   if (state) {
     var t0 = state.t;

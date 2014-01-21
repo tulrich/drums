@@ -34,10 +34,11 @@ var tempo = 120;
 
 var play_state = null;
 
+var INSTRUMENT_COUNT = 13;
 var nav_x = 0;
-var nav_y = 5;
-var NOTES_NAV_Y = 5;
-var NOTES_MAX_NAV_X = 16;
+var nav_y = INSTRUMENT_COUNT + 1;
+var NOTES_NAV_Y = INSTRUMENT_COUNT + 1;
+var NOTES_MAX_NAV_X = 17;
 var MAX_NAV_X = 10;
 var MAX_NAV_Y = 18 + NOTES_NAV_Y;
 
@@ -271,19 +272,6 @@ function init() {
     spatial_room.push(rm);
   }
 
-//  kit1 = loadkit([
-//      [["bender_stick.wav"]],
-//      [["builttospill_kick.wav"]],
-//      [["builttospill_ride.wav"]],
-//      [["gobo_hat.wav"]],
-//      [["gobo_hat2.wav"]],
-//      [["gobo_snare.wav"]],
-//      [["smokingpopes_kick.wav"]],
-//      [["spoon_hi_tom.wav"]],
-//      [["spoon_lo_tom.wav"]],
-//      [["spoon_snare.wav"]],
-//      [["stevenson_snare.wav"]],]
-//          );
 
   // 0: kick
   // 1: snare
@@ -345,7 +333,6 @@ function init() {
      ["samples/ride 5 - 18in zildjian.wav"],
      ["samples/ride 6 - 18in zildjian.wav"],
     ],
-    //[["samples/small crash 6 - 16in zildjian.wav"]],
     [["samples/small tom 1 - 10in pearl master custom.wav"],
      ["samples/small tom 2 - 10in pearl master custom.wav"],
      ["samples/small tom 3 - 10in pearl master custom.wav"],
@@ -597,6 +584,12 @@ function focus_nav() {
   if (nav_y >= MAX_NAV_Y) { nav_y = 0; }
 
   if (nav_y < NOTES_NAV_Y) {
+    if (nav_y == 0) {
+      var nav_measure = strip_measure0 + nav_x;
+      nav_to_measure(song, nav_measure);
+    } else {
+      last_instrument = nav_y - 1;
+    }
     if (nav_x < 0) { nav_x = NOTES_MAX_NAV_X - 1; }
     if (nav_x >= NOTES_MAX_NAV_X) { nav_x = 0; }
   } else {
@@ -614,17 +607,23 @@ function focus_nav() {
     var elem = document.getElementById(id);
     elem.previousSibling.focus();
   } else {
-    // Some kind of blur.
+    document.getElementById("timeline_focus").focus();
   }
 }
 
 function nav_up() {
   nav_y--;
+  if (nav_y == 0) {
+    nav_enter_strip();
+  }
   focus_nav();
 }
 
 function nav_down() {
   nav_y++;
+  if (nav_y == 0) {
+    nav_enter_strip();
+  }
   focus_nav();
 }
 
@@ -638,10 +637,17 @@ function nav_right() {
   focus_nav();
 }
 
+function nav_enter_strip() {
+  update_measure_position();
+  nav_x = Math.floor(measure_position);
+}
+
 function do_increment(ticks, modifier) {
   focus_nav();
   if (nav_y < NOTES_NAV_Y) {
-    adjust_notes(last_instrument, ticks, modifier, nav_x, nav_y);
+    if (adjust_notes(last_instrument, ticks, modifier, nav_x, nav_y)) {
+      play(last_instrument, 255.0, 0.010);
+    }
   } else {
     // fx panel
     var id = nav_to_fx_id(nav_x, nav_y);
@@ -863,12 +869,12 @@ function init_kit_fx_ui() {
   ctx.strokeStyle = "#000";
   ctx.lineWidth = 2.0;
   ctx.beginPath();
-  ctx.arc(16.5, 16.5, 14, 0, Math.PI * 2);
+  ctx.arc(16, 16, 14, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(16.5, 16.5 - 8);
-  ctx.lineTo(16.5, 2);
+  ctx.moveTo(16, 16 - 8);
+  ctx.lineTo(16, 2);
   ctx.stroke();
   knob_image_url = canvas.toDataURL();
 
@@ -915,6 +921,7 @@ function create_default_fx() {
     "fx1rev_type": 15,
     "fx1sat": 4,
     "fx2fade": 5,
+    "fx3fade": 5,
     "fx4pan": 10,
     "fx4sat": 4,
     "fx5pan": 21,
@@ -1081,8 +1088,11 @@ function tempo_getset() {
 
 function make_channel_fx_ui(i, label) {
   var outer = document.createElement("div");
-  outer.style.width = "34px";
-  outer.innerHTML = label + "<br/>";
+  outer.style.width = "32px";
+  outer.innerHTML = "<center>" + label + "</center>";
+
+  outer.appendChild(make_meter_widget(fx_channel[i].meter));
+
   outer.appendChild(make_knob_widget(i, "dt", getset(fx_time_trims[i]), -0.050, 0.050, 0));
   outer.appendChild(make_knob_widget(i, "trim", getset(fx_channel[i].trim.gain), 0, 2, 1));
   outer.appendChild(make_knob_widget(i, "eqhi", getset(fx_channel[i].eqhi.gain), -20, 20, 0));
@@ -1107,15 +1117,16 @@ function make_channel_fx_ui(i, label) {
   outer.appendChild(make_toggle_widget(i, "solo", fx_channel[i].solo, "#ffc", "#ff0", false, update_solo_mute));
   outer.appendChild(make_toggle_widget(i, "mute", fx_channel[i].mute, "#fcc", "#f00", false, update_solo_mute));
 
-  outer.appendChild(make_meter_widget(fx_channel[i].meter));
-
   return outer;
 }
 
 function make_master_fx_ui() {
   var outer = document.createElement("div");
-  outer.style.width = "34px";
+  outer.style.width = "32px";
   outer.innerHTML = "master<br/>";
+
+  outer.appendChild(make_meter_widget(master_meter));
+
   outer.appendChild(make_int_widget(10, "tempo", tempo_getset(), 20, 320, 120));
   outer.appendChild(make_knob_widget(10, "dry", getset(master_dry_gain.gain), 0, 2, 1));
   outer.appendChild(make_select_widget(10, "rev_type", select_buffer_getset(master_verb, reverb_buffers), reverb_buffers, 0));
@@ -1125,19 +1136,16 @@ function make_master_fx_ui() {
   outer.appendChild(make_knob_widget(10, "c_att", getset(master_comp.attack), 0, 1, 0.003));
   outer.appendChild(make_knob_widget(10, "c_rel", getset(master_comp.release), 0, 1, 0.050));
 
-  outer.appendChild(make_meter_widget(master_meter));
-
   return outer;
 }
 
 function make_knob_widget(i, label, variable_getset, lo, hi, def, opt_increments, opt_logscale) {
   var d = document.createElement("div");
-  d.setAttribute("class", "control");
+  d.setAttribute("class", "control32x32");
   var id = "fx" + i + label;
-  d.innerHTML = "<div style='height: 32px; display: table-cell; vertical-align: " +
-      "middle;'><a href='javascript:void(0);' class='knob32anchor'> </a>" +
+  d.innerHTML = "<a href='javascript:void(0);' class='knob32anchor'> </a>" +
       "<div class='knob32' id='" + id +
-          "' style='height: 32px;'></div><p class='knoblabel'>" + label + "</p></div>";
+          "' style='height: 32px;'></div><p class='knoblabel'>" + label + "</p>";
 
   var increments = opt_increments || 32;
   var logscale = opt_logscale || false;
@@ -1183,12 +1191,12 @@ function make_knob_widget(i, label, variable_getset, lo, hi, def, opt_increments
 
 function make_toggle_widget(i, label, variable, color_off, color_on, def, update_closure) {
   var d = document.createElement("div");
-  d.setAttribute("class", "control");
-  d.style.height = "16px";
+  d.setAttribute("class", "control32x16");
+  //d.style.height = "16px";
   var id = "fx" + i + label;
-  d.innerHTML = "<div style='height: 16px;'><a href='javascript:void(0);' class='toggle32anchor'> </a>" +
+  d.innerHTML = "<div><a href='javascript:void(0);' class='toggle32anchor'> </a>" +
       "<div class='toggle32' id='" + id +
-      "' style='height: 16px;'></div><p class='togglelabel'>" + label + "</p></div>";
+      "' style='height: 12px; top: 2px'></div><p class='togglelabel'>" + label + "</p></div>";
 
   var adjust = function(increment) {
     var current_value = variable.value;
@@ -1216,7 +1224,7 @@ function make_toggle_widget(i, label, variable, color_off, color_on, def, update
 
 function make_select_widget(i, label, variable_getset, options, def) {
   var d = document.createElement("div");
-  d.setAttribute("class", "control");
+  d.setAttribute("class", "control32x32");
   d.style.height = "32px";
   d.style.width = "32px";
   var id = "fx" + i + label;
@@ -1250,7 +1258,7 @@ function make_select_widget(i, label, variable_getset, options, def) {
 
 function make_int_widget(i, label, variable_getset, min, max, def) {
   var d = document.createElement("div");
-  d.setAttribute("class", "control");
+  d.setAttribute("class", "control32x32");
   d.style.height = "32px";
   d.style.width = "32px";
   var id = "fx" + i + label;
@@ -1405,30 +1413,39 @@ window.onkeyup = keyup;
 
     </script>
     <style type="text/css" id="styles">
-      .control {
-        //margin-left: auto;
-        //margin-right: 0px;
-        //float: right;
+      body {
+	margin: 0;
+        font-family: sans-serif;
+      }
+      button {
+        font-size: 10px;
+      }
+      .control32x32 {
         position: relative;
-        width: 34px;
-        height: 38px;
+        width: 32px;
+        height: 32px;
+      }
+      .control32x16 {
+	position: relative;
+	width: 32px;
+	height: 16px;
       }
       .gauge32 {
         height: 32px;
         width: 32px;
         background-size: 8px 32px;
         background-position: bottom;
-        //background-image: linear-gradient(to top, blue, cyan, green, yellow, red);
         background-image: linear-gradient(to top, cyan, green, yellow, red);
       }
       .knoblabel {
         width: 32px;
+	height: 32px;
         position: relative;
         font-size: 10px;
         font-family: sans-serif;
-        text-align: center;
-        margin-left: auto;
-        margin-right: auto;
+	display: table-cell;
+	vertical-align: middle;
+	text-align: center;
       }
       .knob32anchor {
         position: absolute;
@@ -1436,17 +1453,19 @@ window.onkeyup = keyup;
         height: 32px;
       }
       .knob32anchor:focus {
-        //background-color: yellow;
-        border: 2px solid yellow;
+        outline: 2px solid yellow;
       }
       .togglelabel {
         width: 32px;
+	height: 16px;
         position: relative;
         font-size: 10px;
         font-family: sans-serif;
         text-align: center;
         margin-left: auto;
         margin-right: auto;
+	margin-top: 0px;
+	margin-bottom: 0px;
       }
 
       .toggle32 {
@@ -1460,7 +1479,7 @@ window.onkeyup = keyup;
         height: 16px;
       }
       .toggle32anchor:focus {
-        border: 2px solid yellow;
+        outline: 2px solid yellow;
       }
 
       .select32 {
@@ -1475,38 +1494,42 @@ window.onkeyup = keyup;
 	overflow: hidden;
 	overflow-wrap: break-word;
 	font-size: 9px;
-	font-family: sans;
+	font-family: sans-serif;
       }
       .select32anchor:focus {
-        border: 2px solid yellow;
+        outline: 2px solid yellow;
       }
     </style>
   </head>
   <body>
+    <div id="container" style="margin: 0 auto; width: 400px;">
+	<a id="timeline_focus" href="javascript:void(0)" style="position:absolute; left: 2px;">timeline_focus</a>
+      <div id="timeline" style="height: 200px; width: 400px;">
+        <canvas id="timeline_canvas" width="400" height="200" style="position:absolute;"></canvas>
+        <canvas id="timeline_overlay_canvas" width="400" height="200" style="position:absolute;"></canvas>
+      </div>
 
-    <div id="timeline" style="height: 200px; width: 400px;">
-      <canvas id="timeline_canvas" width="400" height="200" style="position:absolute;"></canvas>
-      <canvas id="timeline_overlay_canvas" width="400" height="200" style="position:absolute;"></canvas>
+      <table id="kitparams" style="width: 400px; font-size: 10px; background-color: #888; border-spacing: 0; padding: 0px;" cellpadding="0">
+        <tr valign="top">
+          <td id="fx0">
+          </td><td id="fx1">
+          </td><td id="fx2">
+          </td><td id="fx3">
+          </td><td id="fx4">
+          </td><td id="fx5">
+          </td><td id="fx6">
+          </td><td id="fx7">
+          </td><td id="fx8">
+          </td>
+	      <!-- <td width=10></td> -->
+          <td id="fxmaster">
+          </td>
+          <td><div style="width: 32px">
+	    <button id="play_button" onclick="toggle_play()">&#9654;</button><br/>
+  	    <button id="prerender_button" onclick="prerender()">mp3</button>
+  	  </div></td>
+        </tr>
+      </table>
     </div>
-
-    <table id="kitparams" style="height: 400px;">
-      <tr valign="top">
-        <td id="fx0">
-        </td><td id="fx1">
-        </td><td id="fx2">
-        </td><td id="fx3">
-        </td><td id="fx4">
-        </td><td id="fx5">
-        </td><td id="fx6">
-        </td><td id="fx7">
-        </td><td id="fx8">
-	</td><td width=10><!-- spacer --></td>
-        <td id="fxmaster">
-        </td>
-        <td><button id="play_button" onclick="toggle_play()">&#9654;</button><br/>
-	    <button id="prerender_button" onclick="prerender()">mp3</button>
-	    </td>
-      </tr>
-    </table>
   </body>
 </html>

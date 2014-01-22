@@ -38,7 +38,7 @@ var INSTRUMENT_COUNT = 13;
 var nav_x = 0;
 var nav_y = INSTRUMENT_COUNT + 1;
 var NOTES_NAV_Y = INSTRUMENT_COUNT + 1;
-var NOTES_MAX_NAV_X = 17;
+var NOTES_MAX_NAV_X = 32;
 var MAX_NAV_X = 10;
 var MAX_NAV_Y = 18 + NOTES_NAV_Y;
 
@@ -449,13 +449,13 @@ function keydown(ev) {
   } else if (ev.keyCode == 32) {  // space
     toggle_play();
   } else if (ev.keyCode == 38) {  // up
-    nav_up();
+    nav_up(ev.shiftKey);
   } else if (ev.keyCode == 40) {  // down
-    nav_down();
+    nav_down(ev.shiftKey);
   } else if (ev.keyCode == 37) {  // left
-    nav_left();
+    nav_left(ev.shiftKey);
   } else if (ev.keyCode == 39) {  // right
-    nav_right();
+    nav_right(ev.shiftKey);
   } else if (ev.keyCode == 189) {  // -
     do_increment(-1, ev.shiftKey ? 1 : 0);
   } else if (ev.keyCode == 187) {  // +
@@ -586,7 +586,15 @@ function focus_nav() {
   if (nav_y < NOTES_NAV_Y) {
     if (nav_y == 0) {
       var nav_measure = strip_measure0 + nav_x;
-      nav_to_measure(song, nav_measure);
+      nav_measure = nav_to_measure(song, nav_measure);
+
+      if (nav_x < 0) {
+        nav_x = 0;
+        // TODO scroll
+      } else if (nav_x > 6) {
+        nav_x = 6;
+        // TODO scroll
+      }
     } else {
       last_instrument = nav_y - 1;
     }
@@ -611,7 +619,7 @@ function focus_nav() {
   }
 }
 
-function nav_up() {
+function nav_up(shift) {
   nav_y--;
   if (nav_y == 0) {
     nav_enter_strip();
@@ -619,7 +627,7 @@ function nav_up() {
   focus_nav();
 }
 
-function nav_down() {
+function nav_down(shift) {
   nav_y++;
   if (nav_y == 0) {
     nav_enter_strip();
@@ -627,13 +635,29 @@ function nav_down() {
   focus_nav();
 }
 
-function nav_left() {
-  nav_x--;
+function nav_left(shift) {
+  if (nav_y >= 1 && nav_y < NOTES_NAV_Y) {
+    if (shift) {
+      nav_x--;
+    } else {
+      nav_x = (nav_x - 2) & ~1;
+    }
+  } else {
+    nav_x--;
+  }
   focus_nav();
 }
 
-function nav_right() {
-  nav_x++;
+function nav_right(shift) {
+  if (nav_y >= 1 && nav_y < NOTES_NAV_Y) {
+    if (shift) {
+      nav_x++;
+    } else {
+      nav_x = (nav_x + 2) & ~1;
+    }
+  } else {
+    nav_x++;
+  }
   focus_nav();
 }
 

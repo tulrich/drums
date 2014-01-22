@@ -119,13 +119,12 @@ function show_measure_strip(ctx, x0, y0, mwidth, mheight,
   }
 }
 
+var EDIT_INTERVAL = 512;
+var EDIT_SELECT_TOLERANCE = 256;
+
 function adjust_notes(inst, ticks, modifier, nav_x, nav_y) {
   var freq = 1 << (NOTES_NAV_Y - 1 - nav_y);
   var phase = nav_x;
-  var phase_wrapped = (phase & ((1 << nav_y) - 1));
-
-  var x = phase_wrapped;
-  var interval = 16 / freq;
 
   var measure0 = Math.floor(measure_position);
   if (measure0 >= song.measure_reference.length) {
@@ -135,16 +134,14 @@ function adjust_notes(inst, ticks, modifier, nav_x, nav_y) {
   var mi = song.measure_reference[measure0];
   var measure = song.measure[mi];
   var add_note = false;
-  for (var i = 0; i < freq; i++) {
-    if (!adjust_note(ticks, modifier, measure, inst, x * 1024)) {
-      if (i == 0) {
-	add_note = true;
-      }
-    }
-    x += interval;
+
+  var x = (nav_x * EDIT_INTERVAL) % (measure.beats * 4096);
+
+  if (!adjust_note(ticks, modifier, measure, inst, x)) {
+    add_note = true;
   }
   if (add_note) {
-    toggle_note(true, measure, inst, phase_wrapped * 1024);
+    toggle_note(true, measure, inst, x);
   }
 
   if (measure.viewdata) {
@@ -156,13 +153,6 @@ function adjust_notes(inst, ticks, modifier, nav_x, nav_y) {
 }
 
 function toggle_notes(inst, nav_x, nav_y) {
-  var freq = 1 << (NOTES_NAV_Y - 1 - nav_y);
-  var phase = nav_x;
-  var phase_wrapped = (phase & ((1 << nav_y) - 1));
-
-  var x = phase_wrapped;
-  var interval = 16 / freq;
-
   var measure0 = Math.floor(measure_position);
   if (measure0 >= song.measure_reference.length) {
     return;  // no-op
@@ -171,11 +161,11 @@ function toggle_notes(inst, nav_x, nav_y) {
   var mi = song.measure_reference[measure0];
   var measure = song.measure[mi];
 
+  var x = (nav_x * EDIT_INTERVAL) % (measure.beats * 4096);
+
   var on_or_off = undefined;
-  for (var i = 0; i < freq; i++) {
-    on_or_off = toggle_note(on_or_off, measure, inst, x * 1024);
-    x += interval;
-  }
+  on_or_off = toggle_note(on_or_off, measure, inst, x);
+
   if (measure.viewdata) {
     measure.viewdata.dirty = true;
   }
@@ -187,7 +177,9 @@ function toggle_note(on_or_off, measure, inst, t) {
   var new_note = null;
   for (var i = 0; i < measure.note.length; i++) {
     var n = measure.note[i];
-    if (n.i == inst && n.t >= t - 512 && n.t < t + 512) {
+    if (n.i == inst &&
+        n.t >= t - EDIT_SELECT_TOLERANCE &&
+        n.t < t + EDIT_SELECT_TOLERANCE) {
       // Match!
       if (!on_or_off) {
         // Erase this note.
@@ -221,13 +213,19 @@ function adjust_note(ticks, modifier, measure, inst, t) {
   // Adjust existing notes.
   for (var i = 0; i < measure.note.length; i++) {
     var n = measure.note[i];
-    if (n.i == inst && n.t >= t - 512 && n.t < t + 512) {
+    if (n.i == inst &&
+        n.t >= t - EDIT_SELECT_TOLERANCE &&
+        n.t < t + EDIT_SELECT_TOLERANCE) {
       // Match!
 
       // Modify this note.
       if (!modifier) {
         // Change the velocity.
-        n.v = Math.max(15, Math.min(n.v + 16 * ticks, 255));
+        n.v = n.v + 16 * ticks;
+        if (n.v <= 0 || n.v > 255) {
+          // Erase this note.
+          measure.note.splice(i, 1);
+        }
       } else {
         // Change the timing.
         n.t = Math.max(0, Math.min(n.t + 16 * ticks, measure.beats * 4096 - 1));
@@ -280,8 +278,8 @@ function show_overlay() {
     // The little tick for the horizontal position.
     ctx.beginPath();
     ctx.strokeStyle = "#ff0";
-    ctx.moveTo((MEASURE_WIDTH / 16) * nav_x + x0, FOCUS_Y0 - 2.5);
-    ctx.lineTo((MEASURE_WIDTH / 16) * nav_x + x0 + 7, FOCUS_Y0 - 2.5);
+    ctx.moveTo((MEASURE_WIDTH / 32) * nav_x + x0, FOCUS_Y0 - 2.5);
+    ctx.lineTo((MEASURE_WIDTH / 32) * nav_x + x0 + 7, FOCUS_Y0 - 2.5);
     ctx.stroke();
 
     // The boxes around the selected notes.
@@ -289,7 +287,7 @@ function show_overlay() {
     var phase = nav_x;
     var phase_wrapped = phase;  //xxxxxx (phase & ((1 << nav_y) - 1));
 
-    var x = (MEASURE_WIDTH / 16) * phase_wrapped + x0;
+    var x = (MEASURE_WIDTH / 32) * phase_wrapped + x0;
     var interval = MEASURE_WIDTH / freq;
     ctx.strokeStyle = "#ff0";
     for (var i = 0; i < freq; i++) {

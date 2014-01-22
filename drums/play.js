@@ -118,6 +118,7 @@ function nav_to_measure(song, measure_i) {
   if (measure_i != Math.floor(m)) {
     reset_state_to_measure(song, measure_i, play_state);
   }
+  return measure_i;
 }
 
 function change_tempo(state, song, new_tempo) {

@@ -380,6 +380,7 @@ function init() {
   init_kit_fx_ui();
   update_from_location();
   init_timeline();
+  focus_nav();
 }
 
 var squaring_curve = null;
@@ -577,6 +578,30 @@ function nav_to_fx_id(x, y) {
     return id = "fx10" + master_fx_ids[yi];
   }
   return '';
+}
+
+function fx_id_to_x_y(id) {
+  var x = 0;
+  var y = NOTES_NAV_Y;
+  if (id.substr(0, 4) == "fx10") {
+    x = 9;
+    for (var i = 0; i < master_fx_ids.length; i++) {
+      if (master_fx_ids[i] == id.substr(4, 100)) {
+	y = i + NOTES_NAV_Y;
+	break;
+      }
+    }
+  } else {
+    x = id.charCodeAt(2) - 48;
+    for (var i = 0; i < fx_ids.length; i++) {
+      if (fx_ids[i] == id.substr(3, 100)) {
+	y = i + NOTES_NAV_Y;
+	break;
+      }
+    }
+  }
+
+  return { "x": x, "y": y };
 }
 
 function focus_nav() {
@@ -883,7 +908,7 @@ function update_solo_mute(id, channel) {
 var knob_image_url;
 
 function init_kit_fx_ui() {
-  // Make a knob.
+  // Make a knob image.
   var canvas = document.createElement('canvas');
   canvas.setAttribute("width", "32");
   canvas.setAttribute("height", "32");
@@ -1163,6 +1188,61 @@ function make_master_fx_ui() {
   return outer;
 }
 
+var dragging_element = null;
+var dragging_id = "";
+var drag_mouse_y0 = 0;
+
+function knob_mousedown(ev) {
+  // Start dragging.
+  dragging_element = ev.currentTarget;
+  dragging_id = dragging_element.children[1].id;
+  drag_mouse_y0 = -ev.clientY;
+
+  var xy = fx_id_to_x_y(dragging_id);
+  console.log(xy);//xxxxxx
+  nav_x = xy.x;
+  nav_y = xy.y;
+  focus_nav();
+
+  ev.preventDefault();
+}
+
+function doc_mousemove(ev) {
+  if (dragging_id == "" || !(dragging_id in fx_adjust_function)) {
+    stop_dragging();
+    return;
+  }
+  ev.preventDefault();
+
+  var y = -ev.clientY;
+  var dy = (y - drag_mouse_y0);
+  var absdy = Math.abs(dy);
+
+  var increment = Math.floor(absdy / 8.0);
+  if (increment == 0) {
+    return;
+  }
+
+  if (dy < 0) { increment = -increment; }
+  drag_mouse_y0 += increment * 8.0;
+
+  fx_adjust_function[dragging_id](increment);
+
+  // TODO: Display the current value or something...
+}
+
+function doc_mouseup(ev) {
+  if (dragging_id != "") {
+    ev.preventDefault();
+    stop_dragging();
+  }
+}
+
+function stop_dragging() {
+  dragging_id = "";
+  dragging_element = null;
+}
+
 function make_knob_widget(i, label, variable_getset, lo, hi, def, opt_increments, opt_logscale) {
   var d = document.createElement("div");
   d.setAttribute("class", "control32x32");
@@ -1170,6 +1250,7 @@ function make_knob_widget(i, label, variable_getset, lo, hi, def, opt_increments
   d.innerHTML = "<a href='javascript:void(0);' class='knob32anchor'> </a>" +
       "<div class='knob32' id='" + id +
           "' style='height: 32px;'></div><p class='knoblabel'>" + label + "</p>";
+  d.onmousedown = knob_mousedown;
 
   var increments = opt_increments || 32;
   var logscale = opt_logscale || false;
@@ -1434,6 +1515,8 @@ function make_meter_widget(analyzer) {
 window.onload = init;
 window.onkeydown = keydown;
 window.onkeyup = keyup;
+document.onmousemove = doc_mousemove;
+document.onmouseup = doc_mouseup;
 
     </script>
     <style type="text/css" id="styles">
